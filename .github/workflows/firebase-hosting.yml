@@ -46,9 +46,14 @@ jobs:
             echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
           fi
 
+      - name: Write Firebase service account to file
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > $HOME/elliebellie-723ab-d84ebd2e9e71.json
+        shell: bash
+
       - name: Deploy to Firebase
         run: |
           echo "Deploying to Firebase Hosting..."
           firebase deploy --only hosting --project elliebellie-723ab
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/elliebellie-723ab-d84ebd2e9e71.json
