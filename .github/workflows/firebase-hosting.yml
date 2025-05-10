@@ -31,7 +31,7 @@ jobs:
       - name: Build Web App
         run: |
           echo "Starting Expo web export..."
-          npx expo export:web --output-dir web-build
+          npx expo export:web --output web-build
           echo "Web build completed. Directory contents:"
           ls -la web-build
 
