@@ -33,7 +33,7 @@ jobs:
           pwd
           echo "Current directory contents before build:"
           ls -la
-          npm run build:web
+          npx expo export:web
           echo "Current directory contents after build:"
           ls -la
           
@@ -43,28 +43,22 @@ jobs:
           echo "Current directory contents:"
           ls -la
           
-          # Check if dist directory exists
-          if [ ! -d "dist" ]; then
-            echo "dist directory not found, checking for other build directories:"
-            find . -type d -name "dist" -o -name "web" -o -name "build"
+          # Check for build output
+          if [ -d "web-build" ]; then
+            echo "Found existing web-build directory"
+          elif [ -d "dist" ]; then
+            echo "Found dist directory"
+            mkdir -p web-build
+            cp -r dist/* web-build/
+          else
+            echo "Searching for build output:"
+            find . -type d -name "web-build" -o -name "dist" -o -name "web"
             exit 1
           fi
-          
-          # Create web-build directory
-          mkdir -p web-build
-          echo "Created web-build directory"
-          
-          # Copy contents from dist to web-build
-          echo "Copying contents from dist to web-build"
-          cp -r dist/* web-build/
           
           # Verify web-build contents
           echo "Contents of web-build directory:"
           ls -la web-build
-          
-          # Create a test file to verify directory is writable
-          echo "test" > web-build/test.txt
-          echo "Created test file in web-build"
           
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
