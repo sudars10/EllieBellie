@@ -28,6 +28,10 @@ jobs:
           npm ci
           npm install -g expo-cli
 
+      - name: Install Firebase CLI
+        run: |
+          npm install -g firebase-tools
+
       - name: Build Web App
         run: |
           echo "Starting Expo web export..."
