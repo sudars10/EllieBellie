@@ -36,7 +36,7 @@ jobs:
           ls -la
           
           # Run the build
-          npx expo export:web
+          npx expo export -p web
           
           echo "Current directory contents after build:"
           ls -la
