@@ -48,10 +48,10 @@ jobs:
           # Move build output to web-build
           if [ -d "dist" ]; then
             echo "Moving dist contents to web-build"
-            mv dist/* web-build/
+            cp -r dist/* web-build/
           elif [ -d "web" ]; then
             echo "Moving web contents to web-build"
-            mv web/* web-build/
+            cp -r web/* web-build/
           else
             echo "No build output found!"
             find . -type d -name "dist" -o -name "web"
@@ -81,4 +81,5 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           channelId: live
-          projectId: elliebellie 
+          projectId: elliebellie
+          entryPoint: web-build 
