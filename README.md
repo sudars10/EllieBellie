@@ -1,6 +1,6 @@
 # EllieBellie
 
-EllieBellie is a mobile application built with [Expo](https://expo.dev/) and React Native. This app demonstrates a simple tab-based navigation structure with Home, Users, and Settings screens, including user detail navigation and clean UI components.
+EllieBellie is a expo mobile application built with [Expo](https://expo.dev/) and React Native. This app demonstrates a simple tab-based navigation structure with Home, Users, and Settings screens, including user detail navigation and clean UI components.
 
 ## Features
 - Tab navigation: Home, Users, Settings
