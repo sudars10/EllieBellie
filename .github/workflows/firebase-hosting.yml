@@ -43,21 +43,28 @@ jobs:
           echo "Current directory contents:"
           ls -la
           
-          # Create web-build directory if it doesn't exist
-          mkdir -p web-build
-          
-          # Copy contents from dist to web-build
-          if [ -d "dist" ]; then
-            echo "Found dist directory, copying contents to web-build"
-            cp -r dist/* web-build/
-            echo "Directory contents after copy:"
-            ls -la web-build
-          else
-            echo "dist directory not found in current location"
-            echo "Searching for dist directory in parent directories:"
-            find .. -type d -name "dist"
+          # Check if dist directory exists
+          if [ ! -d "dist" ]; then
+            echo "dist directory not found, checking for other build directories:"
+            find . -type d -name "dist" -o -name "web" -o -name "build"
             exit 1
           fi
+          
+          # Create web-build directory
+          mkdir -p web-build
+          echo "Created web-build directory"
+          
+          # Copy contents from dist to web-build
+          echo "Copying contents from dist to web-build"
+          cp -r dist/* web-build/
+          
+          # Verify web-build contents
+          echo "Contents of web-build directory:"
+          ls -la web-build
+          
+          # Create a test file to verify directory is writable
+          echo "test" > web-build/test.txt
+          echo "Created test file in web-build"
           
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
