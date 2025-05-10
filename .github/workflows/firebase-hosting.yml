@@ -30,19 +30,29 @@ jobs:
         
       - name: Build Web App
         run: |
-          npm run build:web
+          pwd
+          echo "Current directory contents before build:"
           ls -la
-          echo "Checking if dist directory exists:"
-          ls -la dist || echo "dist directory not found"
+          npm run build:web
+          echo "Current directory contents after build:"
+          ls -la
+          echo "Checking for dist directory:"
+          find . -type d -name "dist" -o -name "web-build"
           
       - name: Prepare for Firebase
         run: |
+          pwd
+          echo "Current directory contents:"
+          ls -la
           if [ -d "dist" ]; then
+            echo "Found dist directory, renaming to web-build"
             mv dist web-build
-            echo "Successfully renamed dist to web-build"
+            echo "Directory contents after rename:"
             ls -la
           else
-            echo "dist directory not found!"
+            echo "dist directory not found in current location"
+            echo "Searching for dist directory in parent directories:"
+            find .. -type d -name "dist"
             exit 1
           fi
           
