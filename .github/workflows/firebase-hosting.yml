@@ -36,6 +36,8 @@ jobs:
           npx expo export:web
           echo "Current directory contents after build:"
           ls -la
+          echo "Searching for build output directories:"
+          find . -type d -name "web-build" -o -name "dist" -o -name "web"
           
       - name: Prepare for Firebase
         run: |
@@ -43,15 +45,20 @@ jobs:
           echo "Current directory contents:"
           ls -la
           
-          # Check for build output
-          if [ -d "web-build" ]; then
-            echo "Found existing web-build directory"
-          elif [ -d "dist" ]; then
-            echo "Found dist directory"
-            mkdir -p web-build
+          # Create web-build directory
+          mkdir -p web-build
+          echo "Created web-build directory"
+          
+          # Find and copy build output
+          if [ -d "dist" ]; then
+            echo "Found dist directory, copying contents"
             cp -r dist/* web-build/
+          elif [ -d "web" ]; then
+            echo "Found web directory, copying contents"
+            cp -r web/* web-build/
           else
-            echo "Searching for build output:"
+            echo "No build output found in expected locations"
+            echo "Searching for any build output:"
             find . -type d -name "web-build" -o -name "dist" -o -name "web"
             exit 1
           fi
@@ -59,6 +66,12 @@ jobs:
           # Verify web-build contents
           echo "Contents of web-build directory:"
           ls -la web-build
+          
+          # Create index.html if it doesn't exist
+          if [ ! -f "web-build/index.html" ]; then
+            echo "Creating index.html"
+            echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
+          fi
           
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
