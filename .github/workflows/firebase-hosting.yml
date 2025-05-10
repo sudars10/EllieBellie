@@ -26,52 +26,40 @@ jobs:
           node-version: '18'
           
       - name: Install Dependencies
-        run: npm ci
-        
+        run: |
+          npm ci
+          npm install -g expo-cli
+          
       - name: Build Web App
         run: |
           pwd
           echo "Current directory contents before build:"
           ls -la
-          npx expo export:web
+          
+          # Create web-build directory first
+          mkdir -p web-build
+          
+          # Run the build
+          npx expo export:web --output-dir web-build
+          
           echo "Current directory contents after build:"
           ls -la
-          echo "Searching for build output directories:"
-          find . -type d -name "web-build" -o -name "dist" -o -name "web"
-          
-      - name: Prepare for Firebase
-        run: |
-          pwd
-          echo "Current directory contents:"
-          ls -la
-          
-          # Create web-build directory
-          mkdir -p web-build
-          echo "Created web-build directory"
-          
-          # Find and copy build output
-          if [ -d "dist" ]; then
-            echo "Found dist directory, copying contents"
-            cp -r dist/* web-build/
-          elif [ -d "web" ]; then
-            echo "Found web directory, copying contents"
-            cp -r web/* web-build/
-          else
-            echo "No build output found in expected locations"
-            echo "Searching for any build output:"
-            find . -type d -name "web-build" -o -name "dist" -o -name "web"
-            exit 1
-          fi
-          
-          # Verify web-build contents
           echo "Contents of web-build directory:"
           ls -la web-build
           
-          # Create index.html if it doesn't exist
-          if [ ! -f "web-build/index.html" ]; then
-            echo "Creating index.html"
-            echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
+      - name: Verify Build Output
+        run: |
+          if [ ! -d "web-build" ]; then
+            echo "web-build directory not found!"
+            exit 1
           fi
+          
+          if [ ! -f "web-build/index.html" ]; then
+            echo "index.html not found in web-build directory!"
+            exit 1
+          fi
+          
+          echo "Build output verified successfully"
           
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
