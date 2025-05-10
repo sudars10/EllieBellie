@@ -1,4 +1,5 @@
 name: Deploy to Firebase Hosting
+
 on:
   push:
     branches:
@@ -17,76 +18,38 @@ concurrency:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          
+
       - name: Install Dependencies
         run: |
           npm ci
           npm install -g expo-cli
-          
+
       - name: Build Web App
         run: |
-          echo "Current directory contents before build:"
-          ls -la
-          
-          # Run the build
-          npx expo export -p web
-          
-          echo "Current directory contents after build:"
-          ls -la
-          
-          # Create web-build directory if it doesn't exist
-          mkdir -p web-build
-          
-          # Move build output to web-build
-          if [ -d "dist" ]; then
-            echo "Moving dist contents to web-build"
-            cp -r dist/* web-build/
-          elif [ -d "web" ]; then
-            echo "Moving web contents to web-build"
-            cp -r web/* web-build/
-          else
-            echo "No build output found!"
-            find . -type d -name "dist" -o -name "web"
-            exit 1
-          fi
-          
-          echo "Contents of web-build directory:"
+          echo "Starting Expo web export..."
+          npx expo export:web --output-dir web-build
+          echo "Web build completed. Directory contents:"
           ls -la web-build
-          
-      - name: Verify Build Output
+
+      - name: Ensure index.html Exists
         run: |
-          if [ ! -d "web-build" ]; then
-            echo "web-build directory not found!"
-            exit 1
-          fi
-          
           if [ ! -f "web-build/index.html" ]; then
-            echo "Creating index.html"
+            echo "Creating fallback index.html..."
             echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
           fi
-          
-          echo "Build output verified successfully"
-          
+
       - name: Deploy to Firebase
         run: |
-          # Verify web-build directory exists
-          if [ ! -d "web-build" ]; then
-            echo "Error: web-build directory not found!"
-            exit 1
-          fi
-          
-          # List contents of web-build
-          echo "Contents of web-build directory before deployment:"
-          ls -la web-build
-          
-          # Deploy to Firebase
+          echo "Deploying to Firebase Hosting..."
           firebase deploy --only hosting
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }} 
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
