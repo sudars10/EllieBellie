@@ -29,11 +29,22 @@ jobs:
         run: npm ci
         
       - name: Build Web App
-        run: npm run build:web
-        
+        run: |
+          npm run build:web
+          ls -la
+          echo "Checking if dist directory exists:"
+          ls -la dist || echo "dist directory not found"
+          
       - name: Prepare for Firebase
         run: |
-          mv dist web-build
+          if [ -d "dist" ]; then
+            mv dist web-build
+            echo "Successfully renamed dist to web-build"
+            ls -la
+          else
+            echo "dist directory not found!"
+            exit 1
+          fi
           
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
