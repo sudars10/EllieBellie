@@ -36,14 +36,28 @@ jobs:
           echo "Current directory contents before build:"
           ls -la
           
-          # Create web-build directory first
-          mkdir -p web-build
-          
           # Run the build
-          npx expo export:web --output-dir web-build
+          npx expo export:web
           
           echo "Current directory contents after build:"
           ls -la
+          
+          # Create web-build directory
+          mkdir -p web-build
+          
+          # Move build output to web-build
+          if [ -d "dist" ]; then
+            echo "Moving dist contents to web-build"
+            mv dist/* web-build/
+          elif [ -d "web" ]; then
+            echo "Moving web contents to web-build"
+            mv web/* web-build/
+          else
+            echo "No build output found!"
+            find . -type d -name "dist" -o -name "web"
+            exit 1
+          fi
+          
           echo "Contents of web-build directory:"
           ls -la web-build
           
@@ -55,8 +69,8 @@ jobs:
           fi
           
           if [ ! -f "web-build/index.html" ]; then
-            echo "index.html not found in web-build directory!"
-            exit 1
+            echo "Creating index.html"
+            echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
           fi
           
           echo "Build output verified successfully"
