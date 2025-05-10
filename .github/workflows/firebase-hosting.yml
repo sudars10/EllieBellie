@@ -36,19 +36,22 @@ jobs:
           npm run build:web
           echo "Current directory contents after build:"
           ls -la
-          echo "Checking for dist directory:"
-          find . -type d -name "dist" -o -name "web-build"
           
       - name: Prepare for Firebase
         run: |
           pwd
           echo "Current directory contents:"
           ls -la
+          
+          # Create web-build directory if it doesn't exist
+          mkdir -p web-build
+          
+          # Copy contents from dist to web-build
           if [ -d "dist" ]; then
-            echo "Found dist directory, renaming to web-build"
-            mv dist web-build
-            echo "Directory contents after rename:"
-            ls -la
+            echo "Found dist directory, copying contents to web-build"
+            cp -r dist/* web-build/
+            echo "Directory contents after copy:"
+            ls -la web-build
           else
             echo "dist directory not found in current location"
             echo "Searching for dist directory in parent directories:"
