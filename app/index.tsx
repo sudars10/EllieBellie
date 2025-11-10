@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, Text, TouchableOpacity, ActivityIndicator, RefreshControl, SafeAreaView } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
+import { config } from '../config';
 
 interface NewsItem {
   title: string;
@@ -19,20 +20,15 @@ export default function NewsScreen() {
 
   const fetchNews = async () => {
     try {
-      // Option 1: NewsAPI (requires free API key from https://newsapi.org/)
-      // Get your free API key and replace 'YOUR_API_KEY' below
-      const API_KEY = '75f5808df240445aa9c7bc588137b775'; // Replace with your NewsAPI key
-      const newsApiUrl = `https://newsapi.org/v2/top-headlines?country=us&apiKey=75f5808df240445aa9c7bc588137b775`;
-      
-      // Option 2: Alternative free API (NewsData.io - get free key from https://newsdata.io/)
-      // const newsDataApiKey = 'YOUR_NEWSDATA_KEY';
-      // const newsDataUrl = `https://newsdata.io/api/1/news?apikey=${newsDataApiKey}&country=us&language=en&category=top`;
+      // Get API key from config file
+      const API_KEY = config.newsApiKey;
+      const newsApiUrl = `${config.newsApiUrl}?country=${config.defaultCountry}&apiKey=${API_KEY}`;
       
       let response;
       let data;
       
       // Try NewsAPI first if API key is set
-      if (API_KEY && API_KEY === '75f5808df240445aa9c7bc588137b775') {
+      if (API_KEY) {
         try {
           response = await fetch(newsApiUrl);
           if (response.ok) {
