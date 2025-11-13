@@ -75,25 +75,19 @@ export default function NewsScreen() {
         keyExtractor={(item, index) => item.name || index.toString()}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Top News Sources</Text>
-            <Text style={styles.headerSubtitle}>Tap any source to visit their website</Text>
+            <Text style={styles.headerTitle}>Top 10 news sources of today</Text>
           </View>
         }
         renderItem={({ item, index }) => (
           <TouchableOpacity
             style={styles.newsItem}
             onPress={() => openNewsSource(item.url)}
-            activeOpacity={0.7}
+            activeOpacity={0.6}
           >
-            <View style={styles.newsNumber}>
-              <Text style={styles.newsNumberText}>{index + 1}</Text>
-            </View>
+            <Text style={styles.newsNumber}>{index + 1}.</Text>
             <View style={styles.newsContent}>
               <Text style={styles.newsTitle}>{item.name}</Text>
               <Text style={styles.newsDescription}>{item.description}</Text>
-              <View style={styles.newsMeta}>
-                <Text style={styles.newsSource}>Tap to visit →</Text>
-              </View>
             </View>
           </TouchableOpacity>
         )}
@@ -107,84 +101,53 @@ export default function NewsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f6f6ef', // Hacker News beige background
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#ff6600', // Hacker News orange
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 0,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 13,
     fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    color: '#000000',
+    // Hacker News uses Verdana, but we'll use system default which is similar
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: 10,
+    paddingBottom: 20,
     flexGrow: 1,
   },
   newsItem: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: 'transparent',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderBottomWidth: 0,
   },
   newsNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  newsNumberText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 13,
+    color: '#828282', // Hacker News gray for numbers
+    marginRight: 4,
+    minWidth: 20,
   },
   newsContent: {
     flex: 1,
   },
   newsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 6,
-    lineHeight: 24,
+    fontSize: 13,
+    fontWeight: 'normal',
+    color: '#000000',
+    marginBottom: 4,
+    lineHeight: 18,
   },
   newsDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  newsMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  newsSource: {
-    fontSize: 12,
-    color: '#007AFF',
-    fontWeight: '500',
+    fontSize: 11,
+    color: '#828282', // Hacker News gray for secondary text
+    lineHeight: 16,
+    marginTop: 2,
   },
 });
