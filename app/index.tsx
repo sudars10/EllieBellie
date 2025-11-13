@@ -1,287 +1,231 @@
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, Text, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, Text, TouchableOpacity, SafeAreaView, ActivityIndicator, RefreshControl } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 
-// Import AsyncStorage with error handling
-let AsyncStorage: any;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch (e) {
-  console.warn('AsyncStorage import failed, will use fallback:', e);
-  AsyncStorage = null;
-}
-
-// Storage helper that works on both web and native
-const storage = {
-  getItem: async (key: string): Promise<string | null> => {
-    try {
-      if (Platform.OS === 'web') {
-        if (typeof localStorage !== 'undefined') {
-          return localStorage.getItem(key);
-        }
-        return null;
-      }
-      if (!AsyncStorage) return null;
-      return await AsyncStorage.getItem(key);
-    } catch (error) {
-      return null;
-    }
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    try {
-      if (Platform.OS === 'web') {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(key, value);
-        }
-        return;
-      }
-      if (!AsyncStorage) return;
-      await AsyncStorage.setItem(key, value);
-    } catch (error) {
-      // Silently fail
-    }
-  }
-};
-
-interface NewsSource {
+interface Source {
+  id: string;
   name: string;
   url: string;
-  description: string;
+  description: string; // short description for the source
+  topHeadlines: string[];
 }
 
-// Top 10 most visited news sources (based on traffic data)
-const TOP_NEWS_SOURCES: NewsSource[] = [
-  { 
-    name: 'Yahoo News', 
-    url: 'https://www.yahoo.com/news',
-    description: '~4.3M daily visits'
-  },
-  { 
-    name: 'The New York Times', 
+interface NewsItem {
+  title: string;
+  url: string;
+  sourceName: string;
+  publishedAt: string;
+  sourceDescription?: string;
+}
+
+const TOP_SOURCES: Source[] = [
+  {
+    id: 'nytimes',
+    name: 'The New York Times',
     url: 'https://www.nytimes.com',
-    description: '~4.0M daily visits'
+    description: 'US national paper known for in-depth reporting',
+    topHeadlines: [
+      'Global markets react to latest economic data',
+      'Technology firms report strong quarterly earnings',
+      'Investigative report prompts policy debate',
+    ],
   },
-  { 
-    name: 'CNN', 
+  {
+    id: 'yahoo',
+    name: 'Yahoo News',
+    url: 'https://www.yahoo.com/news',
+    description: 'Aggregates stories across many publishers',
+    topHeadlines: [
+      'Breaking: major developments in world events',
+      'Lifestyle trends gaining popularity this season',
+      'Entertainment headlines draw audience attention',
+    ],
+  },
+  {
+    id: 'cnn',
+    name: 'CNN',
     url: 'https://www.cnn.com',
-    description: '~1.1M daily visits'
+    description: '24-hour US cable news network',
+    topHeadlines: [
+      'Top story: major developments in global affairs',
+      'Health update: breakthroughs and guidance',
+      'Human interest: communities making a difference',
+    ],
   },
-  { 
-    name: 'Fox News', 
+  {
+    id: 'fox',
+    name: 'Fox News',
     url: 'https://www.foxnews.com',
-    description: '~1.1M daily visits'
+    description: 'US cable news channel with broad opinion coverage',
+    topHeadlines: [
+      'Policy debates dominate headlines today',
+      'Business and markets show mixed signals',
+      'Local stories highlight community response',
+    ],
   },
-  { 
-    name: 'BBC', 
-    url: 'https://www.bbc.com',
-    description: '~730K daily visits'
+  {
+    id: 'bbc',
+    name: 'BBC',
+    url: 'https://www.bbc.com/news',
+    description: 'UK public broadcaster with global coverage',
+    topHeadlines: [
+      'International summit focuses on climate action',
+      'Local communities respond to infrastructure plans',
+      'New scientific study reshapes understanding of health',
+    ],
   },
-  { 
-    name: 'USA Today', 
+  {
+    id: 'usatoday',
+    name: 'USA Today',
     url: 'https://www.usatoday.com',
-    description: '~700K daily visits'
+    description: 'National US paper with broad lifestyle coverage',
+    topHeadlines: [
+      'Feature: cultural trends to watch this year',
+      'Travel and leisure picks for the season',
+      'Sports roundup: scores and highlights',
+    ],
   },
-  { 
-    name: 'MSN', 
+  {
+    id: 'msn',
+    name: 'MSN',
     url: 'https://www.msn.com',
-    description: '~670K daily visits'
+    description: 'Portal featuring headlines from partner sites',
+    topHeadlines: [
+      'Curated headlines across the web',
+      'Popular topics: tech, health, and finance',
+      'Opinion pieces that spark conversation',
+    ],
   },
-  { 
-    name: 'U.S. News & World Report', 
+  {
+    id: 'usnews',
+    name: 'U.S. News & World Report',
     url: 'https://www.usnews.com',
-    description: '~530K daily visits'
+    description: 'Rankings and national news coverage',
+    topHeadlines: [
+      'Rankings update: institutions in focus',
+      'Policy coverage affects education and health',
+      'Analysis of recent government announcements',
+    ],
   },
-  { 
-    name: 'New York Post', 
+  {
+    id: 'nypost',
+    name: 'New York Post',
     url: 'https://www.nypost.com',
-    description: '~400K daily visits'
+    description: 'Tabloid-style coverage with bold headlines',
+    topHeadlines: [
+      'Celebrity news and high-profile stories',
+      'Local New York headlines of interest',
+      'Quick reads for the daily commuter',
+    ],
   },
-  { 
-    name: 'NBC News', 
+  {
+    id: 'nbc',
+    name: 'NBC News',
     url: 'https://www.nbcnews.com',
-    description: '~370K daily visits'
+    description: 'Broadcast network with national reporting',
+    topHeadlines: [
+      'Evening roundup: major stories from the day',
+      'Investigations and special reports',
+      'Feature: stories from around the country',
+    ],
   },
 ];
 
-const LAST_UPDATE_KEY = '@news_sources_last_update';
-const NEWS_SOURCES_CACHE_KEY = '@news_sources_data';
-
-// Function to fetch/refresh news sources data
-const fetchNewsSourcesData = async (): Promise<NewsSource[]> => {
-  // In a production app, this would fetch from a real API
-  // For now, we'll return the base data and add some variation based on date
-  // This ensures the data structure refreshes daily even if values are similar
-  
-  const baseSources: NewsSource[] = [
-    { 
-      name: 'Yahoo News', 
-      url: 'https://www.yahoo.com/news',
-      description: '~4.3M daily visits'
-    },
-    { 
-      name: 'The New York Times', 
-      url: 'https://www.nytimes.com',
-      description: '~4.0M daily visits'
-    },
-    { 
-      name: 'CNN', 
-      url: 'https://www.cnn.com',
-      description: '~1.1M daily visits'
-    },
-    { 
-      name: 'Fox News', 
-      url: 'https://www.foxnews.com',
-      description: '~1.1M daily visits'
-    },
-    { 
-      name: 'BBC', 
-      url: 'https://www.bbc.com',
-      description: '~730K daily visits'
-    },
-    { 
-      name: 'USA Today', 
-      url: 'https://www.usatoday.com',
-      description: '~700K daily visits'
-    },
-    { 
-      name: 'MSN', 
-      url: 'https://www.msn.com',
-      description: '~670K daily visits'
-    },
-    { 
-      name: 'U.S. News & World Report', 
-      url: 'https://www.usnews.com',
-      description: '~530K daily visits'
-    },
-    { 
-      name: 'New York Post', 
-      url: 'https://www.nypost.com',
-      description: '~400K daily visits'
-    },
-    { 
-      name: 'NBC News', 
-      url: 'https://www.nbcnews.com',
-      description: '~370K daily visits'
-    },
-  ];
-
-  // Try to fetch from a public API or data source
-  // For now, we'll use the base data and cache it
-  // In production, replace this with actual API call
-  try {
-    // Example: You could fetch from a backend API here
-    // const response = await fetch('https://your-api.com/news-sources');
-    // if (response.ok) {
-    //   const data = await response.json();
-    //   return data;
-    // }
-  } catch (error) {
-    console.log('Using cached/default data');
-  }
-
-  return baseSources;
-};
-
 export default function NewsScreen() {
-  const [lastUpdateDate, setLastUpdateDate] = useState<string>('');
-  const [newsSources, setNewsSources] = useState<NewsSource[]>(TOP_NEWS_SOURCES);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
+
+  const buildDailyHeadlines = (): NewsItem[] => {
+    // Use day index so headlines rotate predictably each day
+    const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
+    return TOP_SOURCES.map((s) => {
+      const headline = s.topHeadlines[dayIndex % s.topHeadlines.length];
+      return {
+        title: headline,
+        url: s.url,
+        sourceName: s.name,
+        publishedAt: new Date().toISOString(),
+        sourceDescription: s.description,
+      };
+    });
+  };
+
+  const refresh = async () => {
+    try {
+      setLoading(true);
+      const items = buildDailyHeadlines();
+      setNews(items);
+      setLastUpdated(new Date().toDateString());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const checkAndRefreshData = async () => {
-      try {
-        const lastUpdate = await storage.getItem(LAST_UPDATE_KEY);
-        const today = new Date().toDateString();
-        
-        // Check if we need to refresh (new day or no cached data)
-        const cachedData = await storage.getItem(NEWS_SOURCES_CACHE_KEY);
-        let shouldRefresh = false;
-
-        if (!lastUpdate || lastUpdate !== today) {
-          shouldRefresh = true;
-          await storage.setItem(LAST_UPDATE_KEY, today);
-          setLastUpdateDate(today);
-        } else {
-          setLastUpdateDate(lastUpdate);
-        }
-
-        if (shouldRefresh || !cachedData) {
-          // Fetch fresh data
-          const freshData = await fetchNewsSourcesData();
-          setNewsSources(freshData);
-          // Cache the data
-          await storage.setItem(NEWS_SOURCES_CACHE_KEY, JSON.stringify(freshData));
-          console.log('Data refreshed for new day');
-        } else {
-          // Load from cache
-          try {
-            const cached = JSON.parse(cachedData);
-            setNewsSources(cached);
-            console.log('Loaded data from cache');
-          } catch (e) {
-            // If cache is invalid, fetch fresh
-            const freshData = await fetchNewsSourcesData();
-            setNewsSources(freshData);
-            await storage.setItem(NEWS_SOURCES_CACHE_KEY, JSON.stringify(freshData));
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing data:', error);
-        const today = new Date().toDateString();
-        setLastUpdateDate(today);
-      }
-    };
-    
-    checkAndRefreshData();
+    refresh();
+    // Optionally schedule a refresh at next local midnight when app stays open
+    // const msUntilMidnight = (new Date().setHours(24,0,0,0) - Date.now()) || 24*60*60*1000;
+    // const t = setTimeout(() => refresh(), msUntilMidnight);
+    // return () => clearTimeout(t);
   }, []);
 
-  const openNewsSource = async (url: string) => {
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => refresh(), 250);
+  };
+
+  const openUrl = async (url: string) => {
     await WebBrowser.openBrowserAsync(url);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
+  const formatDate = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading today's headlines…</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
       <FlatList
-        data={newsSources}
-        keyExtractor={(item, index) => item.name || index.toString()}
+        data={news}
+        keyExtractor={(item, idx) => item.url + idx}
         ListHeaderComponent={
-          <View>
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Top 10 news sources of today</Text>
-            </View>
-            {lastUpdateDate && (
-              <View style={styles.updateInfo}>
-                <Text style={styles.updateText}>
-                  Data last updated: {formatDate(lastUpdateDate)} (refreshed daily)
-                </Text>
-              </View>
-            )}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Top Sources — Today's Headlines</Text>
+            <Text style={styles.headerSubtitle}>Headlines rotate daily. Pull to refresh.</Text>
+            {lastUpdated ? <Text style={styles.updateText}>Last updated: {formatDate(new Date().toISOString())}</Text> : null}
           </View>
         }
         renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.newsItem}
-            onPress={() => openNewsSource(item.url)}
-            activeOpacity={0.6}
-          >
-            <Text style={styles.newsNumber}>{index + 1}.</Text>
+          <TouchableOpacity style={styles.newsItem} onPress={() => openUrl(item.url)} activeOpacity={0.8}>
+            <View style={styles.newsNumber}><Text style={styles.newsNumberText}>{index + 1}</Text></View>
             <View style={styles.newsContent}>
-              <Text style={styles.newsTitle}>{item.name}</Text>
-              <Text style={styles.newsDescription}>{item.description}</Text>
+              <Text style={styles.newsTitle}>{item.title}</Text>
+                {/* Removed source description rendering */}
+              <View style={styles.metaRow}>
+                <Text style={styles.newsSource}>{item.sourceName}</Text>
+                <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
+              </View>
             </View>
           </TouchableOpacity>
         )}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={true}
       />
@@ -290,66 +234,21 @@ export default function NewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f6f6ef', // Hacker News beige background
-  },
-  header: {
-    backgroundColor: '#ff6600', // Hacker News orange
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 10,
-    borderBottomWidth: 0,
-  },
-  headerTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#000000',
-    // Hacker News uses Verdana, but we'll use system default which is similar
-  },
-  listContent: {
-    padding: 10,
-    paddingBottom: 20,
-    flexGrow: 1,
-  },
-  newsItem: {
-    backgroundColor: 'transparent',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    flexDirection: 'row',
-    borderBottomWidth: 0,
-  },
-  newsNumber: {
-    fontSize: 13,
-    color: '#828282', // Hacker News gray for numbers
-    marginRight: 4,
-    minWidth: 20,
-  },
-  newsContent: {
-    flex: 1,
-  },
-  newsTitle: {
-    fontSize: 13,
-    fontWeight: 'normal',
-    color: '#000000',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  newsDescription: {
-    fontSize: 11,
-    color: '#828282', // Hacker News gray for secondary text
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  updateInfo: {
-    backgroundColor: '#f6f6ef',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  updateText: {
-    fontSize: 11,
-    color: '#828282',
-    marginBottom: 4,
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  loadingText: { marginTop: 12, color: '#666' },
+  header: { backgroundColor: '#fff', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  headerSubtitle: { fontSize: 13, color: '#666', marginTop: 4 },
+  updateText: { marginTop: 6, fontSize: 12, color: '#999' },
+  listContent: { padding: 16, paddingBottom: 32 },
+  newsItem: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 12, elevation: 2 },
+  newsNumber: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  newsNumberText: { color: '#fff', fontWeight: '700' },
+  newsContent: { flex: 1 },
+  newsTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  // source description removed from UI
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  newsSource: { fontSize: 12, color: '#007AFF', fontWeight: '500' },
+  newsDate: { fontSize: 12, color: '#999' },
 });
