@@ -7,8 +7,8 @@ interface Source {
   id: string;
   name: string;
   url: string;
-  description: string; // short description for the source
-  topHeadlines: string[];
+  description: string; // short description for the source (kept in data, not shown)
+  topHeadlines: { title: string; story: string[] }[];
 }
 
 interface NewsItem {
@@ -16,6 +16,7 @@ interface NewsItem {
   url: string;
   sourceName: string;
   publishedAt: string;
+  story?: string[];
   sourceDescription?: string;
 }
 
@@ -26,9 +27,27 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.nytimes.com',
     description: 'US national paper known for in-depth reporting',
     topHeadlines: [
-      'Global markets react to latest economic data',
-      'Technology firms report strong quarterly earnings',
-      'Investigative report prompts policy debate',
+      {
+        title: 'Global markets react to latest economic data',
+        story: [
+          'Global equity markets moved sharply after today\'s economic reports showed mixed signals. Investors digested data points across multiple economies and adjusted expectations for monetary policy.',
+          'Analysts highlight that manufacturing output and consumer spending diverged, creating uncertainty around short-term growth forecasts.'
+        ]
+      },
+      {
+        title: 'Technology firms report strong quarterly earnings',
+        story: [
+          'Several major technology companies reported better-than-expected revenue driven by cloud services and advertising recovery. The results eased some concerns about slowing demand.',
+          'Executives said they remain focused on efficiency and long-term investments, while signaling cautious guidance for the next quarter.'
+        ]
+      },
+      {
+        title: 'Investigative report prompts policy debate',
+        story: [
+          'A new investigative piece revealed gaps in compliance at several institutions, prompting lawmakers to call for hearings and stricter oversight.',
+          'Experts say reforms could take months to design and implement, and anticipate pushback from industry groups.'
+        ]
+      },
     ],
   },
   {
@@ -37,9 +56,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.yahoo.com/news',
     description: 'Aggregates stories across many publishers',
     topHeadlines: [
-      'Breaking: major developments in world events',
-      'Lifestyle trends gaining popularity this season',
-      'Entertainment headlines draw audience attention',
+      {
+        title: 'Breaking: major developments in world events',
+        story: ['Several regions reported new developments overnight that could reshape diplomatic talks. Officials are monitoring the situation closely and international responses are expected.']
+      },
+      {
+        title: 'Lifestyle trends gaining popularity this season',
+        story: ['Social media and influencer campaigns are driving new lifestyle trends, from home fitness to sustainable fashion. Retailers are responding with targeted offerings.']
+      },
+      {
+        title: 'Entertainment headlines draw audience attention',
+        story: ['A mix of film releases and celebrity events dominated the entertainment beat today, with audience reactions fueling ongoing conversations about representation and awards-season contenders.']
+      },
     ],
   },
   {
@@ -48,9 +76,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.cnn.com',
     description: '24-hour US cable news network',
     topHeadlines: [
-      'Top story: major developments in global affairs',
-      'Health update: breakthroughs and guidance',
-      'Human interest: communities making a difference',
+      {
+        title: 'Top story: major developments in global affairs',
+        story: ['Diplomatic sources report a rapid series of events affecting trade negotiations. Leaders are expected to meet later this week to discuss next steps and potential compromises.']
+      },
+      {
+        title: 'Health update: breakthroughs and guidance',
+        story: ['Researchers announced progress on a study that may influence treatment protocols. Health officials are reviewing the data and planning public guidance updates.']
+      },
+      {
+        title: 'Human interest: communities making a difference',
+        story: ['Local volunteers and small organizations have launched initiatives to support vulnerable communities, demonstrating how grassroots efforts can scale through partnerships.']
+      },
     ],
   },
   {
@@ -59,9 +96,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.foxnews.com',
     description: 'US cable news channel with broad opinion coverage',
     topHeadlines: [
-      'Policy debates dominate headlines today',
-      'Business and markets show mixed signals',
-      'Local stories highlight community response',
+      {
+        title: 'Policy debates dominate headlines today',
+        story: ['Lawmakers engaged in heated debates over several high-profile bills as public hearings continue. Analysts say the outcome could shape legislative priorities for months.']
+      },
+      {
+        title: 'Business and markets show mixed signals',
+        story: ['Markets reacted unevenly to corporate earnings and macro indicators, leaving investors cautious. Some sectors outperformed while others retreated on profit-taking.']
+      },
+      {
+        title: 'Local stories highlight community response',
+        story: ['Communities rallied around recent events, organizing relief efforts and highlighting the importance of local leadership in crisis response.']
+      },
     ],
   },
   {
@@ -70,9 +116,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.bbc.com/news',
     description: 'UK public broadcaster with global coverage',
     topHeadlines: [
-      'International summit focuses on climate action',
-      'Local communities respond to infrastructure plans',
-      'New scientific study reshapes understanding of health',
+      {
+        title: 'International summit focuses on climate action',
+        story: ['Delegates at the summit discussed fresh commitments and funding mechanisms aimed at reducing emissions. Negotiators emphasized the need for measurable targets.']
+      },
+      {
+        title: 'Local communities respond to infrastructure plans',
+        story: ['Residents voiced concerns about proposed infrastructure changes, while officials said the plans aim to improve long-term connectivity and resilience.']
+      },
+      {
+        title: 'New scientific study reshapes understanding of health',
+        story: ['A peer-reviewed study presents new findings that could alter clinical recommendations. Scientists caution that further research is needed before changes to practice are implemented.']
+      },
     ],
   },
   {
@@ -81,9 +136,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.usatoday.com',
     description: 'National US paper with broad lifestyle coverage',
     topHeadlines: [
-      'Feature: cultural trends to watch this year',
-      'Travel and leisure picks for the season',
-      'Sports roundup: scores and highlights',
+      {
+        title: 'Feature: cultural trends to watch this year',
+        story: ['Writers explore emerging cultural trends shaping music, fashion, and social conversation. The feature highlights creators and communities driving change.']
+      },
+      {
+        title: 'Travel and leisure picks for the season',
+        story: ['Editors rounded up destinations and tips for seasonal travel, emphasizing both popular hotspots and lesser-known getaways that offer good value.']
+      },
+      {
+        title: 'Sports roundup: scores and highlights',
+        story: ['A concise roundup of today\'s scores and standout performances across major leagues, including quick insights and next-match previews.']
+      },
     ],
   },
   {
@@ -92,9 +156,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.msn.com',
     description: 'Portal featuring headlines from partner sites',
     topHeadlines: [
-      'Curated headlines across the web',
-      'Popular topics: tech, health, and finance',
-      'Opinion pieces that spark conversation',
+      {
+        title: 'Curated headlines across the web',
+        story: ['Editors curate a selection of notable stories from partner outlets, providing a snapshot of the day\'s most talked-about topics.']
+      },
+      {
+        title: 'Popular topics: tech, health, and finance',
+        story: ['Coverage today focused on technology advances, health advisories, and market movements, each affecting consumer sentiment in different ways.']
+      },
+      {
+        title: 'Opinion pieces that spark conversation',
+        story: ['Columnists offered a variety of perspectives on current events, prompting debate from readers and social media commentators alike.']
+      },
     ],
   },
   {
@@ -103,9 +176,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.usnews.com',
     description: 'Rankings and national news coverage',
     topHeadlines: [
-      'Rankings update: institutions in focus',
-      'Policy coverage affects education and health',
-      'Analysis of recent government announcements',
+      {
+        title: 'Rankings update: institutions in focus',
+        story: ['A new rankings release reshuffled several institutions, prompting discussion about methodology and implications for prospective students.']
+      },
+      {
+        title: 'Policy coverage affects education and health',
+        story: ['Policy shifts at the federal level are influencing program funding and regulatory priorities in education and public health. Stakeholders are responding with analysis and testimony.']
+      },
+      {
+        title: 'Analysis of recent government announcements',
+        story: ['Experts weighed in on recent announcements, offering context on potential economic and social impacts of the proposed measures.']
+      },
     ],
   },
   {
@@ -114,9 +196,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.nypost.com',
     description: 'Tabloid-style coverage with bold headlines',
     topHeadlines: [
-      'Celebrity news and high-profile stories',
-      'Local New York headlines of interest',
-      'Quick reads for the daily commuter',
+      {
+        title: 'Celebrity news and high-profile stories',
+        story: ['Entertainment insiders reported on a high-profile development, drawing attention across social platforms and sparking fan reactions.']
+      },
+      {
+        title: 'Local New York headlines of interest',
+        story: ['City officials announced updates to local projects, with community leaders offering mixed reactions about the expected benefits.']
+      },
+      {
+        title: 'Quick reads for the daily commuter',
+        story: ['A selection of short, punchy stories designed for quick consumption during commutes, covering sports, entertainment, and human interest.']
+      },
     ],
   },
   {
@@ -125,9 +216,18 @@ const TOP_SOURCES: Source[] = [
     url: 'https://www.nbcnews.com',
     description: 'Broadcast network with national reporting',
     topHeadlines: [
-      'Evening roundup: major stories from the day',
-      'Investigations and special reports',
-      'Feature: stories from around the country',
+      {
+        title: 'Evening roundup: major stories from the day',
+        story: ['An organized roundup of the day\'s most significant developments, providing quick context and links to deeper coverage.']
+      },
+      {
+        title: 'Investigations and special reports',
+        story: ['Reporters continued following an ongoing investigation, uncovering new details that may shape public debate and oversight.']
+      },
+      {
+        title: 'Feature: stories from around the country',
+        story: ['A series of features highlights local initiatives and profiles individuals making an impact in their communities.']
+      },
     ],
   },
 ];
@@ -137,19 +237,21 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
   const buildDailyHeadlines = (): NewsItem[] => {
     // Use day index so headlines rotate predictably each day
     const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
     return TOP_SOURCES.map((s) => {
-      const headline = s.topHeadlines[dayIndex % s.topHeadlines.length];
+      const headlineObj = s.topHeadlines[dayIndex % s.topHeadlines.length];
       return {
-        title: headline,
+        title: headlineObj.title,
         url: s.url,
         sourceName: s.name,
         publishedAt: new Date().toISOString(),
+        story: headlineObj.story,
         sourceDescription: s.description,
-      };
+      } as NewsItem;
     });
   };
 
@@ -212,19 +314,39 @@ export default function NewsScreen() {
             {lastUpdated ? <Text style={styles.updateText}>Last updated: {formatDate(new Date().toISOString())}</Text> : null}
           </View>
         }
-        renderItem={({ item, index }) => (
-          <TouchableOpacity style={styles.newsItem} onPress={() => openUrl(item.url)} activeOpacity={0.8}>
-            <View style={styles.newsNumber}><Text style={styles.newsNumberText}>{index + 1}</Text></View>
-            <View style={styles.newsContent}>
-              <Text style={styles.newsTitle}>{item.title}</Text>
-                {/* Removed source description rendering */}
-              <View style={styles.metaRow}>
-                <Text style={styles.newsSource}>{item.sourceName}</Text>
-                <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
-              </View>
+        renderItem={({ item, index }) => {
+          const key = `${index}`;
+          const expanded = !!expandedMap[key];
+          return (
+            <View style={styles.newsItemBlock}>
+              <TouchableOpacity style={styles.newsItem} onPress={() => openUrl(item.url)} activeOpacity={0.8}>
+                <View style={styles.newsNumber}><Text style={styles.newsNumberText}>{index + 1}</Text></View>
+                <View style={styles.newsContent}>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.newsTitle}>{item.title}</Text>
+                    <TouchableOpacity
+                      style={styles.arrowButton}
+                      onPress={() => setExpandedMap((p) => ({ ...p, [key]: !p[key] }))}
+                    >
+                      <Text style={styles.arrowText}>{expanded ? '▴' : '▾'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.newsSource}>{item.sourceName}</Text>
+                    <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              {expanded && item.story && (
+                <View style={styles.storyContainer}>
+                  {item.story.map((p, i) => (
+                    <Text key={i} style={styles.storyText}>{p}</Text>
+                  ))}
+                </View>
+              )}
             </View>
-          </TouchableOpacity>
-        )}
+          );
+        }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={true}
@@ -248,6 +370,12 @@ const styles = StyleSheet.create({
   newsContent: { flex: 1 },
   newsTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   // source description removed from UI
+  newsItemBlock: { marginBottom: 12 },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
+  arrowButton: { padding: 6, marginLeft: 8 },
+  arrowText: { fontSize: 18, color: '#007AFF' },
+  storyContainer: { backgroundColor: '#fff', padding: 12, paddingTop: 6, borderRadius: 8, marginTop: 8, elevation: 1 },
+  storyText: { fontSize: 14, color: '#444', marginBottom: 8, lineHeight: 20 },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between' },
   newsSource: { fontSize: 12, color: '#007AFF', fontWeight: '500' },
   newsDate: { fontSize: 12, color: '#999' },
