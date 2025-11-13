@@ -8,57 +8,57 @@ interface NewsSource {
   description: string;
 }
 
-// Top 10 news sources with direct links
+// Top 10 most visited news sources (based on traffic data)
 const TOP_NEWS_SOURCES: NewsSource[] = [
   { 
-    name: 'BBC News', 
-    url: 'https://www.bbc.com/news',
-    description: 'Breaking news and top stories from BBC'
-  },
-  { 
-    name: 'CNN', 
-    url: 'https://www.cnn.com',
-    description: 'Latest news and breaking stories from CNN'
-  },
-  { 
-    name: 'Reuters', 
-    url: 'https://www.reuters.com',
-    description: 'Global news and business updates'
-  },
-  { 
-    name: 'The Guardian', 
-    url: 'https://www.theguardian.com',
-    description: 'Independent journalism and news'
+    name: 'Yahoo News', 
+    url: 'https://www.yahoo.com/news',
+    description: '~4.3M daily visits'
   },
   { 
     name: 'The New York Times', 
     url: 'https://www.nytimes.com',
-    description: 'Breaking news and in-depth reporting'
+    description: '~4.0M daily visits'
   },
   { 
-    name: 'NPR', 
-    url: 'https://www.npr.org',
-    description: 'National Public Radio news and stories'
+    name: 'CNN', 
+    url: 'https://www.cnn.com',
+    description: '~1.1M daily visits'
   },
   { 
-    name: 'Associated Press', 
-    url: 'https://apnews.com',
-    description: 'AP News - Trusted journalism'
+    name: 'Fox News', 
+    url: 'https://www.foxnews.com',
+    description: '~1.1M daily visits'
   },
   { 
-    name: 'The Washington Post', 
-    url: 'https://www.washingtonpost.com',
-    description: 'Democracy dies in darkness'
+    name: 'BBC', 
+    url: 'https://www.bbc.com',
+    description: '~730K daily visits'
   },
   { 
-    name: 'Al Jazeera', 
-    url: 'https://www.aljazeera.com',
-    description: 'News from a global perspective'
+    name: 'USA Today', 
+    url: 'https://www.usatoday.com',
+    description: '~700K daily visits'
   },
   { 
-    name: 'Financial Times', 
-    url: 'https://www.ft.com',
-    description: 'Global business and financial news'
+    name: 'MSN', 
+    url: 'https://www.msn.com',
+    description: '~670K daily visits'
+  },
+  { 
+    name: 'U.S. News & World Report', 
+    url: 'https://www.usnews.com',
+    description: '~530K daily visits'
+  },
+  { 
+    name: 'New York Post', 
+    url: 'https://www.nypost.com',
+    description: '~400K daily visits'
+  },
+  { 
+    name: 'NBC News', 
+    url: 'https://www.nbcnews.com',
+    description: '~370K daily visits'
   },
 ];
 
