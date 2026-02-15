@@ -35,15 +35,15 @@ jobs:
       - name: Build Web App
         run: |
           echo "Starting Expo web export..."
-          npx expo export --platform web --output-dir web-build
+          npm run build:web
           echo "Web build completed. Directory contents:"
-          ls -la web-build
+          ls -la dist
 
       - name: Ensure index.html Exists
         run: |
-          if [ ! -f "web-build/index.html" ]; then
+          if [ ! -f "dist/index.html" ]; then
             echo "Creating fallback index.html..."
-            echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > web-build/index.html
+            echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > dist/index.html
           fi
 
       - name: Deploy to Firebase
