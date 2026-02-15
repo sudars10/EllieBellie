@@ -56,11 +56,33 @@ const getNewsApiKey = () => {
   return fromEnv || fromExtra;
 };
 
-const getNewsEndpoint = () => {
-  const proxyFromEnv = process.env.EXPO_PUBLIC_NEWS_PROXY_URL;
-  if (proxyFromEnv) return proxyFromEnv;
-  if (Platform.OS === 'web') return NEWS_PROXY_PATH;
-  return NEWS_API_URL;
+const getNewsProxyUrl = () => {
+  const fromEnv = process.env.EXPO_PUBLIC_NEWS_PROXY_URL;
+  const fromExtra = Constants.expoConfig?.extra?.newsProxyUrl;
+  return fromEnv || fromExtra || '';
+};
+
+const getNewsEndpoints = () => {
+  const proxyUrl = getNewsProxyUrl();
+  if (Platform.OS === 'web') {
+    const endpoints = [NEWS_PROXY_PATH];
+    if (proxyUrl && proxyUrl !== NEWS_PROXY_PATH) endpoints.push(proxyUrl);
+    return endpoints;
+  }
+  return [NEWS_API_URL];
+};
+
+const parseNewsResponse = (response: Response, bodyText: string) => {
+  try {
+    return JSON.parse(bodyText) as NewsApiResponse;
+  } catch {
+    const contentType = response.headers.get('content-type') || '';
+    const gotHtml = contentType.includes('text/html') || bodyText.trimStart().startsWith('<');
+    if (gotHtml) {
+      throw new Error('News endpoint returned HTML instead of JSON.');
+    }
+    throw new Error('News endpoint returned an invalid response.');
+  }
 };
 
 export default function NewsScreen() {
@@ -76,35 +98,44 @@ export default function NewsScreen() {
       setLoading(true);
       setErrorMessage('');
 
-      const endpoint = getNewsEndpoint();
-      const params = new URLSearchParams({
-        country: DEFAULT_COUNTRY,
-        pageSize: String(TOP_NEWS_COUNT),
-      });
-      if (endpoint === NEWS_API_URL) {
-        const apiKey = getNewsApiKey();
-        if (!apiKey) {
-          throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
+      const endpoints = getNewsEndpoints();
+      let data: NewsApiResponse | null = null;
+      let lastError: Error | null = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const params = new URLSearchParams({
+            country: DEFAULT_COUNTRY,
+            pageSize: String(TOP_NEWS_COUNT),
+          });
+          if (endpoint === NEWS_API_URL) {
+            const apiKey = getNewsApiKey();
+            if (!apiKey) {
+              throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
+            }
+            params.append('apiKey', apiKey);
+          }
+
+          const response = await fetch(`${endpoint}?${params.toString()}`);
+          const bodyText = await response.text();
+          const parsed = parseNewsResponse(response, bodyText);
+          if (!response.ok || parsed.status !== 'ok') {
+            throw new Error(parsed.message || 'Failed to fetch top headlines.');
+          }
+          data = parsed;
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unable to load news right now.');
         }
-        params.append('apiKey', apiKey);
       }
 
-      const response = await fetch(`${endpoint}?${params.toString()}`);
-      const bodyText = await response.text();
-      let data: NewsApiResponse;
-      try {
-        data = JSON.parse(bodyText) as NewsApiResponse;
-      } catch {
-        const contentType = response.headers.get('content-type') || '';
-        const gotHtml = contentType.includes('text/html') || bodyText.trimStart().startsWith('<');
-        if (gotHtml) {
-          throw new Error('News proxy returned HTML instead of JSON. Deploy Firebase Functions and set NEWS_API_KEY secret.');
+      if (!data) {
+        if (Platform.OS === 'web') {
+          throw new Error(
+            `${lastError?.message || 'Unable to load news right now.'} Configure EXPO_PUBLIC_NEWS_PROXY_URL and deploy functions.`
+          );
         }
-        throw new Error('News proxy returned an invalid response.');
-      }
-
-      if (!response.ok || data.status !== 'ok') {
-        throw new Error(data.message || 'Failed to fetch top headlines.');
+        throw lastError || new Error('Unable to load news right now.');
       }
 
       const articles = data.articles || [];

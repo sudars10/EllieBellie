@@ -53,7 +53,10 @@ export default {
       },
       // API key is read from environment variable or .env file
       // Set NEWS_API_KEY in your .env file or environment variables
-      newsApiKey: process.env.NEWS_API_KEY || process.env.EXPO_PUBLIC_NEWS_API_KEY
+      newsApiKey: process.env.NEWS_API_KEY || process.env.EXPO_PUBLIC_NEWS_API_KEY,
+      // Optional absolute proxy URL for web fallback, e.g.
+      // https://us-central1-<project-id>.cloudfunctions.net/newsProxy
+      newsProxyUrl: process.env.EXPO_PUBLIC_NEWS_PROXY_URL
     }
   }
 };

@@ -54,6 +54,27 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
 
 The API key is stored in `app.config.js` and can be set via environment variables. The `.env` file is gitignored to keep your API key secure. Never commit your actual API key to version control.
 
+## Firebase Web Deployment (News Proxy)
+
+For deployed web, NewsAPI Developer plan requires server-side requests.
+
+1. Install function dependencies:
+   ```bash
+   npm --prefix functions install
+   ```
+2. Set secret used by the Firebase Function:
+   ```bash
+   firebase functions:secrets:set NEWS_API_KEY
+   ```
+3. Build and deploy:
+   ```bash
+   npm run build:web
+   firebase deploy --only functions,hosting
+   ```
+4. Optional fallback for web app runtime:
+   - Set `EXPO_PUBLIC_NEWS_PROXY_URL` to your function URL, for example:
+     `https://us-central1-<project-id>.cloudfunctions.net/newsProxy`
+
 ## License
 
 This project is licensed under the MIT License.
