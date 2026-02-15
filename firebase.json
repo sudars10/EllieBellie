@@ -3,7 +3,8 @@
     "source": "functions"
   },
   "hosting": {
-    "public": "web-build",
+    "site": "elliebellie-723ab",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
