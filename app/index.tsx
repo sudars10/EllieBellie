@@ -38,6 +38,7 @@ interface NewsApiResponse {
 }
 
 const NEWS_API_URL = 'https://newsapi.org/v2/top-headlines';
+const NEWS_SNAPSHOT_PATH = '/news.json';
 const NEWS_PROXY_PATH = '/api/news';
 const DEFAULT_COUNTRY = 'us';
 const TOP_NEWS_COUNT = 10;
@@ -65,7 +66,7 @@ const getNewsProxyUrl = () => {
 const getNewsEndpoints = () => {
   const proxyUrl = getNewsProxyUrl();
   if (Platform.OS === 'web') {
-    const endpoints = [NEWS_PROXY_PATH];
+    const endpoints = [NEWS_SNAPSHOT_PATH, NEWS_PROXY_PATH];
     if (proxyUrl && proxyUrl !== NEWS_PROXY_PATH) endpoints.push(proxyUrl);
     return endpoints;
   }
@@ -132,7 +133,7 @@ export default function NewsScreen() {
       if (!data) {
         if (Platform.OS === 'web') {
           throw new Error(
-            `${lastError?.message || 'Unable to load news right now.'} Configure EXPO_PUBLIC_NEWS_PROXY_URL and deploy functions.`
+            `${lastError?.message || 'Unable to load news right now.'} Ensure /news.json is generated during deploy.`
           );
         }
         throw lastError || new Error('Unable to load news right now.');

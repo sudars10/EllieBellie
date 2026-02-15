@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: '5 6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +28,6 @@ jobs:
       - name: Install Dependencies
         run: |
           npm ci
-          npm --prefix functions ci
           npm install -g expo-cli
 
       - name: Install Firebase CLI
@@ -34,13 +35,22 @@ jobs:
           npm install -g firebase-tools
 
       - name: Build Web App
-        env:
-          EXPO_PUBLIC_NEWS_PROXY_URL: https://us-central1-elliebellie-723ab.cloudfunctions.net/newsProxy
         run: |
           echo "Starting Expo web export..."
           npm run build:web
           echo "Web build completed. Directory contents:"
           ls -la dist
+
+      - name: Generate News Snapshot
+        env:
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+        run: |
+          if [ -z "$NEWS_API_KEY" ]; then
+            echo "Missing NEWS_API_KEY GitHub secret"
+            exit 1
+          fi
+          curl -fsS "https://newsapi.org/v2/top-headlines?country=us&pageSize=10&apiKey=${NEWS_API_KEY}" -o dist/news.json
+          node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync('dist/news.json','utf8')); if(d.status!=='ok'){console.error(d); process.exit(1);} console.log('news snapshot generated with', (d.articles||[]).length, 'articles');"
 
       - name: Ensure index.html Exists
         run: |
@@ -49,9 +59,9 @@ jobs:
             echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > dist/index.html
           fi
 
-      - name: Deploy Functions and Hosting
+      - name: Deploy to Firebase Hosting
         run: |
-          echo "Deploying Firebase Functions and Hosting..."
-          firebase deploy --only functions,hosting --project elliebellie-723ab
+          echo "Deploying Firebase Hosting..."
+          firebase deploy --only hosting --project elliebellie-723ab
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
