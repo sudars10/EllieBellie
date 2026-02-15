@@ -108,6 +108,10 @@ export default function NewsScreen() {
             }
             params.append('apiKey', apiKey);
           }
+          if (endpoint === NEWS_SNAPSHOT_PATH) {
+            // Bust browser/CDN caches so production web always fetches the latest snapshot.
+            params.append('_ts', Date.now().toString());
+          }
 
           const response = await fetch(`${endpoint}?${params.toString()}`);
           const bodyText = await response.text();
