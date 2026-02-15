@@ -49,8 +49,8 @@ jobs:
             echo "Missing NEWS_API_KEY GitHub secret"
             exit 1
           fi
-          curl -fsS "https://newsapi.org/v2/top-headlines?country=us&pageSize=10&apiKey=${NEWS_API_KEY}" -o dist/news.json
-          node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync('dist/news.json','utf8')); if(d.status!=='ok'){console.error(d); process.exit(1);} console.log('news snapshot generated with', (d.articles||[]).length, 'articles');"
+          curl -fsS "https://newsapi.org/v2/top-headlines?country=us&pageSize=30&apiKey=${NEWS_API_KEY}" -o /tmp/news_raw.json
+          node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync('/tmp/news_raw.json','utf8')); if(d.status!=='ok'){console.error(d); process.exit(1);} const articles=(d.articles||[]).filter(a=>a&&a.title&&a.url&&a.title!=='[Removed]').slice(0,10); if(!articles.length){console.error('No valid articles available for snapshot'); process.exit(1);} fs.writeFileSync('dist/news.json', JSON.stringify({status:'ok', totalResults:articles.length, articles}, null, 2)); console.log('news snapshot generated with', articles.length, 'valid articles');"
 
       - name: Ensure index.html Exists
         run: |

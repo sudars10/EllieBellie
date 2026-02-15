@@ -14,35 +14,18 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
-import * as WebBrowser from 'expo-web-browser';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { trackEventAsync } from '../lib/analytics';
+import { TopHeadlinesNewsProvider } from '../lib/newsProvider';
+import { getNewsItemId, readSavedNews, SavedNewsItem, SavedNewsMap, writeSavedNews } from '../lib/savedNews';
 
-interface NewsItem {
-  title: string;
-  url: string;
-  sourceName: string;
-  publishedAt: string;
-}
+type NewsItem = SavedNewsItem;
 
-interface NewsApiArticle {
-  title?: string;
-  url?: string;
-  publishedAt?: string;
-  source?: {
-    name?: string;
-  };
-}
-
-interface NewsApiResponse {
-  status: 'ok' | 'error';
-  articles?: NewsApiArticle[];
-  message?: string;
-}
-
-const NEWS_API_URL = 'https://newsapi.org/v2/top-headlines';
-const NEWS_SNAPSHOT_PATH = '/news.json';
 const DEFAULT_COUNTRY = 'us';
+const DEFAULT_CATEGORY = 'all';
 const TOP_NEWS_COUNT = 10;
+const newsProvider = new TopHeadlinesNewsProvider();
 
 const getLocalDateKey = () => {
   const now = new Date();
@@ -58,29 +41,8 @@ const getNewsApiKey = () => {
   return fromEnv || fromExtra;
 };
 
-const getNewsEndpoints = () => {
-  if (Platform.OS === 'web') {
-    const endpoints = [NEWS_SNAPSHOT_PATH];
-    if (getNewsApiKey()) endpoints.push(NEWS_API_URL);
-    return endpoints;
-  }
-  return [NEWS_API_URL];
-};
-
-const parseNewsResponse = (response: Response, bodyText: string) => {
-  try {
-    return JSON.parse(bodyText) as NewsApiResponse;
-  } catch {
-    const contentType = response.headers.get('content-type') || '';
-    const gotHtml = contentType.includes('text/html') || bodyText.trimStart().startsWith('<');
-    if (gotHtml) {
-      throw new Error('News endpoint returned HTML instead of JSON.');
-    }
-    throw new Error('News endpoint returned an invalid response.');
-  }
-};
-
 export default function NewsScreen() {
+  const router = useRouter();
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -89,7 +51,9 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [savedNewsById, setSavedNewsById] = useState<SavedNewsMap>({});
   const lastRefreshDateRef = useRef('');
+  const hasLoadedSavedNewsRef = useRef(false);
   const revealValuesRef = useRef<Animated.Value[]>([]);
 
   const refresh = useCallback(async () => {
@@ -97,64 +61,21 @@ export default function NewsScreen() {
       setLoading(true);
       setErrorMessage('');
 
-      const endpoints = getNewsEndpoints();
-      let data: NewsApiResponse | null = null;
-      let lastError: Error | null = null;
-
-      for (const endpoint of endpoints) {
-        try {
-          const params = new URLSearchParams({
-            country: DEFAULT_COUNTRY,
-            pageSize: String(TOP_NEWS_COUNT),
-          });
-          if (endpoint === NEWS_API_URL) {
-            const apiKey = getNewsApiKey();
-            if (!apiKey) {
-              throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
-            }
-            params.append('apiKey', apiKey);
-          }
-          if (endpoint === NEWS_SNAPSHOT_PATH) {
-            // Bust browser/CDN caches so production web always fetches the latest snapshot.
-            params.append('_ts', Date.now().toString());
-          }
-
-          const response = await fetch(`${endpoint}?${params.toString()}`);
-          const bodyText = await response.text();
-          const parsed = parseNewsResponse(response, bodyText);
-          if (!response.ok || parsed.status !== 'ok') {
-            throw new Error(parsed.message || 'Failed to fetch top headlines.');
-          }
-          data = parsed;
-          break;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error('Unable to load news right now.');
-        }
-      }
-
-      if (!data) {
-        if (Platform.OS === 'web') {
-          throw new Error(
-            `${lastError?.message || 'Unable to load news right now.'} Ensure /news.json is generated during deploy.`
-          );
-        }
-        throw lastError || new Error('Unable to load news right now.');
-      }
-
-      const articles = data.articles || [];
-      const items: NewsItem[] = articles
-        .filter((article) => !!article.title && !!article.url && article.title !== '[Removed]')
-        .slice(0, TOP_NEWS_COUNT)
-        .map((article) => ({
-          title: article.title || 'Untitled',
-          url: article.url || '',
-          sourceName: article.source?.name || 'Unknown source',
-          publishedAt: article.publishedAt || new Date().toISOString(),
-        }));
+      const items = await newsProvider.fetchTopHeadlines({
+        country: DEFAULT_COUNTRY,
+        category: DEFAULT_CATEGORY,
+        pageSize: TOP_NEWS_COUNT,
+        isWeb: Platform.OS === 'web',
+        newsApiKey: getNewsApiKey(),
+      });
 
       setNews(items);
       setLastUpdated(new Date().toLocaleString());
       lastRefreshDateRef.current = getLocalDateKey();
+      trackEventAsync('feed_loaded', {
+        count: items.length,
+        platform: Platform.OS,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load news right now.';
       setErrorMessage(message);
@@ -204,10 +125,26 @@ export default function NewsScreen() {
     refresh();
   };
 
-  const openUrl = async (url: string) => {
-    if (!url) return;
-    await WebBrowser.openBrowserAsync(url);
-  };
+  const openReader = useCallback(
+    (item: NewsItem) => {
+      if (!item.url) return;
+      trackEventAsync('headline_tap', {
+        articleId: getNewsItemId(item),
+        sourceName: item.sourceName,
+        entryPoint: 'feed',
+      });
+      router.push({
+        pathname: '/reader',
+        params: {
+          url: item.url,
+          title: item.title,
+          sourceName: item.sourceName,
+          publishedAt: item.publishedAt,
+        },
+      });
+    },
+    [router]
+  );
 
   const formatDate = (iso: string) => {
     const date = new Date(iso);
@@ -220,6 +157,53 @@ export default function NewsScreen() {
       minute: '2-digit',
     });
   };
+
+  const toggleSaved = useCallback((item: NewsItem) => {
+    const id = getNewsItemId(item);
+    setSavedNewsById((previous) => {
+      if (previous[id]) {
+        const next = { ...previous };
+        delete next[id];
+        trackEventAsync('bookmark_removed', {
+          articleId: id,
+        });
+        return next;
+      }
+      trackEventAsync('bookmark_added', {
+        articleId: id,
+      });
+      return { ...previous, [id]: item };
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSavedNews = async () => {
+      try {
+        const stored = await readSavedNews();
+        if (cancelled) return;
+        setSavedNewsById(stored);
+      } catch {
+        // Ignore malformed saved data and proceed with empty saved list.
+      } finally {
+        if (!cancelled) hasLoadedSavedNewsRef.current = true;
+      }
+    };
+
+    loadSavedNews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedSavedNewsRef.current) return;
+    writeSavedNews(savedNewsById).catch(() => {
+      // Keep UI responsive even if local persistence fails.
+    });
+  }, [savedNewsById]);
 
   useEffect(() => {
     if (!news.length) return;
@@ -259,9 +243,17 @@ export default function NewsScreen() {
             <Text style={styles.kicker}>EllieBellie Bulletin</Text>
             <Text style={styles.headerTitle}>Top 10 Headlines</Text>
             <Text style={styles.headerSubtitle}>Fresh stories curated for today. Tap any card to open the full report.</Text>
-            <View style={styles.metaPill}>
-              <Text style={styles.updateText}>Updated: {lastUpdated || 'N/A'}</Text>
+            <View style={styles.metaPillRow}>
+              <View style={styles.metaPill}>
+                <Text style={styles.updateText}>Updated: {lastUpdated || 'N/A'}</Text>
+              </View>
+              <View style={styles.savedPill}>
+                <Text style={styles.savedPillText}>Saved: {Object.keys(savedNewsById).length}</Text>
+              </View>
             </View>
+            <TouchableOpacity style={styles.savedScreenButton} onPress={() => router.push('/saved')} activeOpacity={0.85}>
+              <Text style={styles.savedScreenButtonText}>Open Saved</Text>
+            </TouchableOpacity>
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
         }
@@ -272,6 +264,7 @@ export default function NewsScreen() {
         }
         renderItem={({ item, index }) => {
           const reveal = revealValuesRef.current[index] || new Animated.Value(1);
+          const itemSaved = Boolean(savedNewsById[getNewsItemId(item)]);
           return (
             <Animated.View
               style={[
@@ -295,18 +288,29 @@ export default function NewsScreen() {
                 },
               ]}
             >
-              <TouchableOpacity style={styles.newsItem} onPress={() => openUrl(item.url)} activeOpacity={0.86}>
+              <View style={styles.newsItem}>
                 <View style={styles.newsNumber}>
                   <Text style={styles.newsNumberText}>{String(index + 1).padStart(2, '0')}</Text>
                 </View>
                 <View style={styles.newsContent}>
-                  <Text style={styles.newsTitle}>{item.title}</Text>
-                  <View style={styles.metaRow}>
-                    <Text style={styles.newsSource}>{item.sourceName}</Text>
-                    <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
-                  </View>
+                  <TouchableOpacity style={styles.newsOpenArea} onPress={() => openReader(item)} activeOpacity={0.86}>
+                    <Text style={styles.newsTitle}>{item.title}</Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.newsSource}>{item.sourceName}</Text>
+                      <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, itemSaved && styles.saveButtonActive]}
+                    onPress={() => toggleSaved(item)}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={[styles.saveButtonText, itemSaved && styles.saveButtonTextActive]}>
+                      {itemSaved ? 'Saved' : 'Save for later'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             </Animated.View>
           );
         }}
@@ -371,14 +375,33 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 34, lineHeight: 38, color: '#1A1B25', fontWeight: '800' },
   headerSubtitle: { fontSize: 14, color: '#4C4F5D', marginTop: 10, lineHeight: 20 },
+  metaPillRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center' },
   metaPill: {
-    marginTop: 14,
     alignSelf: 'flex-start',
     backgroundColor: '#F8EFE2',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  savedPill: {
+    marginLeft: 8,
+    backgroundColor: '#EAF6F8',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  savedScreenButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D1495B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#FFF8F8',
+  },
+  savedScreenButtonText: { fontSize: 11, color: '#D1495B', fontFamily: 'SpaceMono' },
+  savedPillText: { fontSize: 11, color: '#087E8B', fontFamily: 'SpaceMono' },
   updateText: { fontSize: 11, color: '#5B5560', fontFamily: 'SpaceMono' },
   errorText: { marginTop: 10, color: '#B00020', fontSize: 12, fontFamily: 'SpaceMono' },
   listContent: { paddingHorizontal: 16, paddingBottom: 36 },
@@ -415,8 +438,30 @@ const styles = StyleSheet.create({
   },
   newsNumberText: { color: '#fff', fontSize: 14, fontFamily: 'SpaceMono' },
   newsContent: { flex: 1 },
+  newsOpenArea: { flex: 1 },
   newsTitle: { fontSize: 18, fontWeight: '700', marginBottom: 10, color: '#20222D', lineHeight: 24 },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   newsSource: { fontSize: 12, color: '#087E8B', fontFamily: 'SpaceMono', flex: 1, marginRight: 8 },
   newsDate: { fontSize: 11, color: '#6B6672', fontFamily: 'SpaceMono' },
+  saveButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D1495B',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#FFF8F8',
+  },
+  saveButtonActive: {
+    backgroundColor: '#D1495B',
+  },
+  saveButtonText: {
+    fontSize: 11,
+    color: '#D1495B',
+    fontFamily: 'SpaceMono',
+  },
+  saveButtonTextActive: {
+    color: '#FFFFFF',
+  },
 });
