@@ -39,7 +39,6 @@ interface NewsApiResponse {
 
 const NEWS_API_URL = 'https://newsapi.org/v2/top-headlines';
 const NEWS_SNAPSHOT_PATH = '/news.json';
-const NEWS_PROXY_PATH = '/api/news';
 const DEFAULT_COUNTRY = 'us';
 const TOP_NEWS_COUNT = 10;
 
@@ -57,17 +56,10 @@ const getNewsApiKey = () => {
   return fromEnv || fromExtra;
 };
 
-const getNewsProxyUrl = () => {
-  const fromEnv = process.env.EXPO_PUBLIC_NEWS_PROXY_URL;
-  const fromExtra = Constants.expoConfig?.extra?.newsProxyUrl;
-  return fromEnv || fromExtra || '';
-};
-
 const getNewsEndpoints = () => {
-  const proxyUrl = getNewsProxyUrl();
   if (Platform.OS === 'web') {
-    const endpoints = [NEWS_SNAPSHOT_PATH, NEWS_PROXY_PATH];
-    if (proxyUrl && proxyUrl !== NEWS_PROXY_PATH) endpoints.push(proxyUrl);
+    const endpoints = [NEWS_SNAPSHOT_PATH];
+    if (getNewsApiKey()) endpoints.push(NEWS_API_URL);
     return endpoints;
   }
   return [NEWS_API_URL];
