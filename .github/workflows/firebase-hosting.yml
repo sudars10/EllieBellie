@@ -26,6 +26,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm ci
+          npm --prefix functions ci
           npm install -g expo-cli
 
       - name: Install Firebase CLI
@@ -33,6 +34,8 @@ jobs:
           npm install -g firebase-tools
 
       - name: Build Web App
+        env:
+          EXPO_PUBLIC_NEWS_PROXY_URL: https://us-central1-elliebellie-723ab.cloudfunctions.net/newsProxy
         run: |
           echo "Starting Expo web export..."
           npm run build:web
@@ -46,9 +49,9 @@ jobs:
             echo "<!DOCTYPE html><html><head><title>EllieBellie</title><meta name='viewport' content='width=device-width,initial-scale=1'><script>window.location.href = '/index.html';</script></head><body></body></html>" > dist/index.html
           fi
 
-      - name: Deploy to Firebase
+      - name: Deploy Functions and Hosting
         run: |
-          echo "Deploying to Firebase Hosting..."
-          firebase deploy --only hosting --project elliebellie-723ab
+          echo "Deploying Firebase Functions and Hosting..."
+          firebase deploy --only functions,hosting --project elliebellie-723ab
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
