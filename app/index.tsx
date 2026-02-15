@@ -90,7 +90,18 @@ export default function NewsScreen() {
       }
 
       const response = await fetch(`${endpoint}?${params.toString()}`);
-      const data = (await response.json()) as NewsApiResponse;
+      const bodyText = await response.text();
+      let data: NewsApiResponse;
+      try {
+        data = JSON.parse(bodyText) as NewsApiResponse;
+      } catch {
+        const contentType = response.headers.get('content-type') || '';
+        const gotHtml = contentType.includes('text/html') || bodyText.trimStart().startsWith('<');
+        if (gotHtml) {
+          throw new Error('News proxy returned HTML instead of JSON. Deploy Firebase Functions and set NEWS_API_KEY secret.');
+        }
+        throw new Error('News proxy returned an invalid response.');
+      }
 
       if (!response.ok || data.status !== 'ok') {
         throw new Error(data.message || 'Failed to fetch top headlines.');

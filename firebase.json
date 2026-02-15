@@ -11,7 +11,11 @@
     ],
     "rewrites": [
       {
-        "source": "/api/news",
+        "source": "api/news",
+        "function": "newsProxy"
+      },
+      {
+        "source": "api/news/**",
         "function": "newsProxy"
       },
       {
