@@ -53,8 +53,7 @@ export default {
       },
       // API key is read from environment variable or .env file
       // Set NEWS_API_KEY in your .env file or environment variables
-      newsApiKey: process.env.NEWS_API_KEY || process.env.EXPO_PUBLIC_NEWS_API_KEY || "75f5808df240445aa9c7bc588137b775"
+      newsApiKey: process.env.NEWS_API_KEY || process.env.EXPO_PUBLIC_NEWS_API_KEY
     }
   }
 };
-

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  Platform,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
@@ -37,6 +38,7 @@ interface NewsApiResponse {
 }
 
 const NEWS_API_URL = 'https://newsapi.org/v2/top-headlines';
+const NEWS_PROXY_PATH = '/api/news';
 const DEFAULT_COUNTRY = 'us';
 const TOP_NEWS_COUNT = 10;
 
@@ -54,6 +56,13 @@ const getNewsApiKey = () => {
   return fromEnv || fromExtra;
 };
 
+const getNewsEndpoint = () => {
+  const proxyFromEnv = process.env.EXPO_PUBLIC_NEWS_PROXY_URL;
+  if (proxyFromEnv) return proxyFromEnv;
+  if (Platform.OS === 'web') return NEWS_PROXY_PATH;
+  return NEWS_API_URL;
+};
+
 export default function NewsScreen() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,18 +76,20 @@ export default function NewsScreen() {
       setLoading(true);
       setErrorMessage('');
 
-      const apiKey = getNewsApiKey();
-      if (!apiKey) {
-        throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
-      }
-
+      const endpoint = getNewsEndpoint();
       const params = new URLSearchParams({
         country: DEFAULT_COUNTRY,
         pageSize: String(TOP_NEWS_COUNT),
-        apiKey,
       });
+      if (endpoint === NEWS_API_URL) {
+        const apiKey = getNewsApiKey();
+        if (!apiKey) {
+          throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
+        }
+        params.append('apiKey', apiKey);
+      }
 
-      const response = await fetch(`${NEWS_API_URL}?${params.toString()}`);
+      const response = await fetch(`${endpoint}?${params.toString()}`);
       const data = (await response.json()) as NewsApiResponse;
 
       if (!response.ok || data.status !== 'ok') {
