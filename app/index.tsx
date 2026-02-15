@@ -18,7 +18,6 @@ interface NewsItem {
   sourceName: string;
   publishedAt: string;
   story?: string[];
-  sourceDescription?: string;
 }
 
 const TOP_SOURCES: Source[] = [
@@ -280,22 +279,6 @@ export default function NewsScreen() {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
-  const buildDailyHeadlines = (): NewsItem[] => {
-    // Use day index so headlines rotate predictably each day
-    const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-    return TOP_SOURCES.map((s) => {
-      const headlineObj = s.topHeadlines[dayIndex % s.topHeadlines.length];
-      return {
-        title: headlineObj.title,
-        url: headlineObj.link || s.url,
-        sourceName: s.name,
-        publishedAt: new Date().toISOString(),
-        story: headlineObj.story,
-        sourceDescription: s.description,
-      } as NewsItem;
-    });
-  };
-
   // Lightweight RSS/Atom parsing to get top article for a feed URL.
   const fetchTopArticleFromFeed = async (feedUrl: string) => {
     try {
@@ -363,7 +346,6 @@ export default function NewsScreen() {
               sourceName: s.name,
               publishedAt: new Date().toISOString(),
               story: article.story && article.story.length ? article.story : undefined,
-              sourceDescription: s.description,
             } as NewsItem;
           }
         }
@@ -376,7 +358,6 @@ export default function NewsScreen() {
           sourceName: s.name,
           publishedAt: new Date().toISOString(),
           story: headlineObj.story,
-          sourceDescription: s.description,
         } as NewsItem;
       });
 
