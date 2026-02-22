@@ -78,6 +78,10 @@ export default function NewsScreen() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load news right now.';
+      trackEventAsync('feed_load_failed', {
+        platform: Platform.OS,
+        message,
+      });
       setErrorMessage(message);
       setNews([]);
     } finally {
@@ -129,7 +133,7 @@ export default function NewsScreen() {
     (item: NewsItem) => {
       if (!item.url) return;
       trackEventAsync('headline_tap', {
-        articleId: getNewsItemId(item),
+        articleId: item.id,
         sourceName: item.sourceName,
         entryPoint: 'feed',
       });
@@ -159,7 +163,7 @@ export default function NewsScreen() {
   };
 
   const toggleSaved = useCallback((item: NewsItem) => {
-    const id = getNewsItemId(item);
+    const id = item.id || getNewsItemId(item);
     setSavedNewsById((previous) => {
       if (previous[id]) {
         const next = { ...previous };
@@ -237,7 +241,7 @@ export default function NewsScreen() {
       <View style={styles.bgOrbTertiary} />
       <FlatList
         data={news}
-        keyExtractor={(item, idx) => `${item.url}-${idx}`}
+        keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.kicker}>EllieBellie Bulletin</Text>
@@ -264,7 +268,7 @@ export default function NewsScreen() {
         }
         renderItem={({ item, index }) => {
           const reveal = revealValuesRef.current[index] || new Animated.Value(1);
-          const itemSaved = Boolean(savedNewsById[getNewsItemId(item)]);
+          const itemSaved = Boolean(savedNewsById[item.id]);
           return (
             <Animated.View
               style={[

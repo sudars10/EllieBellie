@@ -1,17 +1,9 @@
-import { SavedNewsItem } from './savedNews';
-
-interface NewsApiArticle {
-  title?: string;
-  url?: string;
-  publishedAt?: string;
-  source?: {
-    name?: string;
-  };
-}
+import { mapArticlesToNewsItems, RawNewsArticle } from './newsSchema';
+import type { SavedNewsItem } from './savedNews';
 
 interface NewsApiResponse {
   status: 'ok' | 'error';
-  articles?: NewsApiArticle[];
+  articles?: RawNewsArticle[];
   message?: string;
 }
 
@@ -31,6 +23,9 @@ const NEWS_API_URL = 'https://newsapi.org/v2/top-headlines';
 const NEWS_SNAPSHOT_PATH = '/news.json';
 const MAX_NEWS_API_PAGE_SIZE = 50;
 const OVERFETCH_MULTIPLIER = 3;
+const REQUEST_TIMEOUT_MS = 8000;
+const MAX_ATTEMPTS_PER_ENDPOINT = 3;
+const RETRY_BASE_DELAY_MS = 300;
 
 const parseNewsResponse = (response: Response, bodyText: string) => {
   try {
@@ -45,16 +40,21 @@ const parseNewsResponse = (response: Response, bodyText: string) => {
   }
 };
 
-const mapArticles = (articles: NewsApiArticle[], pageSize: number): SavedNewsItem[] =>
-  articles
-    .filter((article) => !!article.title && !!article.url && article.title !== '[Removed]')
-    .slice(0, pageSize)
-    .map((article) => ({
-      title: article.title || 'Untitled',
-      url: article.url || '',
-      sourceName: article.source?.name || 'Unknown source',
-      publishedAt: article.publishedAt || new Date().toISOString(),
-    }));
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const getEndpoints = (isWeb: boolean, newsApiKey?: string) => {
   if (isWeb) {
@@ -75,48 +75,61 @@ export class TopHeadlinesNewsProvider implements NewsProvider {
 
     for (let i = 0; i < endpoints.length; i += 1) {
       const endpoint = endpoints[i];
-      try {
-        const query = new URLSearchParams({
-          country,
-          pageSize: String(requestedPageSize),
-        });
-        if (category !== 'all') {
-          query.append('category', category);
-        }
-        if (endpoint === NEWS_API_URL) {
-          if (!newsApiKey) {
-            throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_ENDPOINT; attempt += 1) {
+        try {
+          const query = new URLSearchParams({
+            country,
+            pageSize: String(requestedPageSize),
+          });
+          if (category !== 'all') {
+            query.append('category', category);
           }
-          query.append('apiKey', newsApiKey);
-        }
-        if (endpoint === NEWS_SNAPSHOT_PATH) {
-          query.append('_ts', Date.now().toString());
-        }
+          if (endpoint === NEWS_API_URL) {
+            if (!newsApiKey) {
+              throw new Error('Missing NewsAPI key. Set EXPO_PUBLIC_NEWS_API_KEY or app.config.js extra.newsApiKey.');
+            }
+            query.append('apiKey', newsApiKey);
+          }
+          if (endpoint === NEWS_SNAPSHOT_PATH) {
+            query.append('_ts', Date.now().toString());
+          }
 
-        const response = await fetch(`${endpoint}?${query.toString()}`);
-        const bodyText = await response.text();
-        const parsed = parseNewsResponse(response, bodyText);
-        if (!response.ok || parsed.status !== 'ok') {
-          throw new Error(parsed.message || 'Failed to fetch top headlines.');
+          const response = await fetchWithTimeout(`${endpoint}?${query.toString()}`, REQUEST_TIMEOUT_MS);
+          const bodyText = await response.text();
+          const parsed = parseNewsResponse(response, bodyText);
+          if (!response.ok || parsed.status !== 'ok') {
+            throw new Error(parsed.message || 'Failed to fetch top headlines.');
+          }
+
+          const mapped = mapArticlesToNewsItems(parsed.articles || [], pageSize);
+          const hasNextEndpoint = i < endpoints.length - 1;
+          if (mapped.length < pageSize && hasNextEndpoint) {
+            break;
+          }
+          mappedItems = mapped;
+          break;
+        } catch (error) {
+          const isAbortError = error instanceof Error && error.name === 'AbortError';
+          const reason = isAbortError ? 'Request timed out.' : error instanceof Error ? error.message : 'Unknown error';
+          lastError = new Error(`Attempt ${attempt}/${MAX_ATTEMPTS_PER_ENDPOINT} failed: ${reason}`);
+
+          const shouldRetry = attempt < MAX_ATTEMPTS_PER_ENDPOINT;
+          if (shouldRetry) {
+            await delay(RETRY_BASE_DELAY_MS * attempt);
+          }
         }
-        const mapped = mapArticles(parsed.articles || [], pageSize);
-        const hasNextEndpoint = i < endpoints.length - 1;
-        if (mapped.length < pageSize && hasNextEndpoint) {
-          // If snapshot/live returns fewer than requested valid items, try the next endpoint.
-          continue;
-        }
-        mappedItems = mapped;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unable to load news right now.');
       }
+
+      if (mappedItems.length) break;
     }
 
     if (!mappedItems.length) {
       if (isWeb) {
-        throw new Error(`${lastError?.message || 'Unable to load news right now.'} Ensure /news.json is generated during deploy.`);
+        throw new Error(
+          `${lastError?.message || 'Unable to load news right now.'} Pull to retry. Ensure /news.json is generated during deploy.`
+        );
       }
-      throw lastError || new Error('Unable to load news right now.');
+      throw lastError || new Error('Unable to load news right now. Pull to retry.');
     }
 
     return mappedItems;

@@ -7,9 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { trackEventAsync } from '../lib/analytics';
 import { readSavedNews, SavedNewsItem, SavedNewsMap, writeSavedNews } from '../lib/savedNews';
 
-interface SavedRow extends SavedNewsItem {
-  id: string;
-}
+type SavedRow = SavedNewsItem;
 
 const formatDate = (iso: string) => {
   const date = new Date(iso);
@@ -82,8 +80,7 @@ export default function SavedScreen() {
 
   const savedRows = useMemo<SavedRow[]>(
     () =>
-      Object.entries(savedNewsById)
-        .map(([id, item]) => ({ id, ...item }))
+      Object.values(savedNewsById)
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()),
     [savedNewsById]
   );

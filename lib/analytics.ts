@@ -5,12 +5,17 @@ export type AnalyticsEventName =
   | 'headline_tap'
   | 'bookmark_added'
   | 'bookmark_removed'
-  | 'saved_opened';
+  | 'saved_opened'
+  | 'feed_load_failed';
 
 export interface AnalyticsEvent {
   name: AnalyticsEventName;
   timestamp: string;
   payload: Record<string, string | number | boolean | null>;
+}
+
+export interface AnalyticsSink {
+  track(event: AnalyticsEvent): Promise<void> | void;
 }
 
 const ANALYTICS_STORAGE_KEY = 'elliebellie.analytics.v1';
@@ -32,31 +37,67 @@ const readEvents = async (): Promise<AnalyticsEvent[]> => {
   return [];
 };
 
-export const trackEvent = async (
-  name: AnalyticsEventName,
-  payload: Record<string, string | number | boolean | null> = {}
-) => {
-  const event: AnalyticsEvent = {
-    name,
-    payload,
-    timestamp: new Date().toISOString(),
-  };
+export class ConsoleAnalyticsSink implements AnalyticsSink {
+  track(event: AnalyticsEvent) {
+    console.log(`[analytics] ${event.name}`, event.payload);
+  }
+}
 
-  console.log(`[analytics] ${name}`, payload);
-
-  try {
+export class AsyncStorageBufferSink implements AnalyticsSink {
+  async track(event: AnalyticsEvent) {
     const events = await readEvents();
     events.push(event);
     const trimmed = events.slice(-MAX_EVENTS);
     await AsyncStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(trimmed));
-  } catch {
-    // Avoid impacting UX when local analytics storage fails.
   }
-};
+}
+
+export class AnalyticsClient {
+  private sinks: AnalyticsSink[];
+
+  constructor(sinks: AnalyticsSink[]) {
+    this.sinks = sinks;
+  }
+
+  setSinks(nextSinks: AnalyticsSink[]) {
+    this.sinks = nextSinks;
+  }
+
+  async track(name: AnalyticsEventName, payload: Record<string, string | number | boolean | null> = {}) {
+    const event: AnalyticsEvent = {
+      name,
+      payload,
+      timestamp: new Date().toISOString(),
+    };
+
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.track(event);
+        } catch {
+          // Analytics must never break product flows.
+        }
+      })
+    );
+  }
+
+  trackAsync(name: AnalyticsEventName, payload: Record<string, string | number | boolean | null> = {}) {
+    void this.track(name, payload);
+  }
+}
+
+const analyticsClient = new AnalyticsClient([new ConsoleAnalyticsSink(), new AsyncStorageBufferSink()]);
+
+export const trackEvent = (name: AnalyticsEventName, payload: Record<string, string | number | boolean | null> = {}) =>
+  analyticsClient.track(name, payload);
 
 export const trackEventAsync = (
   name: AnalyticsEventName,
   payload: Record<string, string | number | boolean | null> = {}
 ) => {
-  void trackEvent(name, payload);
+  analyticsClient.trackAsync(name, payload);
+};
+
+export const setAnalyticsSinks = (sinks: AnalyticsSink[]) => {
+  analyticsClient.setSinks(sinks);
 };

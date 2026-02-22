@@ -54,11 +54,11 @@ Definition of done for today:
 
 ## Phase 1: Reliability + Core Retention (Week 1-2)
 - [x] Add provider abstraction for news fetch (`NewsProvider` interface).
-- [ ] Normalize article schema with stable IDs for dedupe/bookmarks.
-- [ ] Add robust fetch retry + timeout + user-visible fallback states.
-- [ ] Add event instrumentation interface (can later connect to Firebase/Amplitude/PostHog).
-- [ ] Add small smoke tests for parsing and mapping logic.
-- [ ] Set up release checklist for web deploy verification.
+- [x] Normalize article schema with stable IDs for dedupe/bookmarks.
+- [x] Add robust fetch retry + timeout + user-visible fallback states.
+- [x] Add event instrumentation interface (can later connect to Firebase/Amplitude/PostHog).
+- [x] Add small smoke tests for parsing and mapping logic.
+- [x] Set up release checklist for web deploy verification.
 
 Exit criteria:
 - Feed is stable and observable. We can detect failures and stale data quickly.
