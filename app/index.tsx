@@ -15,16 +15,19 @@ import {
 import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { trackEventAsync } from '../lib/analytics';
 import { TopHeadlinesNewsProvider } from '../lib/newsProvider';
 import { getNewsItemId, readSavedNews, SavedNewsItem, SavedNewsMap, writeSavedNews } from '../lib/savedNews';
+import { getDefaultUserPreferences, readUserPreferences, UserPreferences } from '../lib/userPreferences';
 
 type NewsItem = SavedNewsItem;
 
-const DEFAULT_COUNTRY = 'us';
-const DEFAULT_CATEGORY = 'all';
 const TOP_NEWS_COUNT = 10;
+const FOR_YOU_COUNT = 3;
+const FOR_YOU_CATEGORY_LIMIT = 3;
+const FOR_YOU_FETCH_PAGE_SIZE = 6;
 const newsProvider = new TopHeadlinesNewsProvider();
 
 const getLocalDateKey = () => {
@@ -41,56 +44,208 @@ const getNewsApiKey = () => {
   return fromEnv || fromExtra;
 };
 
+interface RefreshOptions {
+  silent?: boolean;
+}
+
+interface ForYouResult {
+  items: NewsItem[];
+  fallbackUsed: boolean;
+}
+
 export default function NewsScreen() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [forYouItems, setForYouItems] = useState<NewsItem[]>([]);
+  const [forYouFallbackMessage, setForYouFallbackMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [lastUpdated, setLastUpdated] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [savedNewsById, setSavedNewsById] = useState<SavedNewsMap>({});
+
   const lastRefreshDateRef = useRef('');
   const hasLoadedSavedNewsRef = useRef(false);
   const revealValuesRef = useRef<Animated.Value[]>([]);
+  const preferencesRef = useRef<UserPreferences | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setLoading(true);
-      setErrorMessage('');
-
-      const items = await newsProvider.fetchTopHeadlines({
-        country: DEFAULT_COUNTRY,
-        category: DEFAULT_CATEGORY,
-        pageSize: TOP_NEWS_COUNT,
-        isWeb: Platform.OS === 'web',
-        newsApiKey: getNewsApiKey(),
-      });
-
-      setNews(items);
-      setLastUpdated(new Date().toLocaleString());
-      lastRefreshDateRef.current = getLocalDateKey();
-      trackEventAsync('feed_loaded', {
-        count: items.length,
-        platform: Platform.OS,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to load news right now.';
-      trackEventAsync('feed_load_failed', {
-        platform: Platform.OS,
-        message,
-      });
-      setErrorMessage(message);
-      setNews([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const buildForYouItems = useCallback(async (topHeadlines: NewsItem[], activePreferences: UserPreferences): Promise<ForYouResult> => {
+    const preferredCategories = activePreferences.interests.slice(0, FOR_YOU_CATEGORY_LIMIT);
+    if (!preferredCategories.length) {
+      return {
+        items: topHeadlines.slice(0, FOR_YOU_COUNT),
+        fallbackUsed: false,
+      };
     }
+
+    const settledResults = await Promise.allSettled(
+      preferredCategories.map((category) =>
+        newsProvider.fetchTopHeadlines({
+          country: activePreferences.country,
+          category,
+          pageSize: FOR_YOU_FETCH_PAGE_SIZE,
+          isWeb: Platform.OS === 'web',
+          newsApiKey: getNewsApiKey(),
+        })
+      )
+    );
+
+    const personalizedItems: NewsItem[] = [];
+    const seen = new Set<string>();
+
+    settledResults.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      result.value.forEach((item) => {
+        if (seen.has(item.id)) return;
+        seen.add(item.id);
+        personalizedItems.push(item);
+      });
+    });
+
+    const selected = personalizedItems.slice(0, FOR_YOU_COUNT);
+    let fallbackUsed = selected.length < FOR_YOU_COUNT;
+
+    if (selected.length < FOR_YOU_COUNT) {
+      topHeadlines.forEach((item) => {
+        if (selected.length >= FOR_YOU_COUNT) return;
+        if (seen.has(item.id)) return;
+        seen.add(item.id);
+        selected.push(item);
+      });
+    }
+
+    if (!selected.length) {
+      fallbackUsed = true;
+      return {
+        items: topHeadlines.slice(0, FOR_YOU_COUNT),
+        fallbackUsed,
+      };
+    }
+
+    return {
+      items: selected,
+      fallbackUsed,
+    };
   }, []);
 
+  const refresh = useCallback(
+    async (options: RefreshOptions = {}) => {
+      const activePreferences = preferencesRef.current;
+      if (!activePreferences || !activePreferences.onboardingCompleted) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      try {
+        if (!options.silent) {
+          setLoading(true);
+        }
+        setErrorMessage('');
+
+        const items = await newsProvider.fetchTopHeadlines({
+          country: activePreferences.country,
+          category: 'all',
+          pageSize: TOP_NEWS_COUNT,
+          isWeb: Platform.OS === 'web',
+          newsApiKey: getNewsApiKey(),
+        });
+
+        const forYou = await buildForYouItems(items, activePreferences);
+
+        if (forYou.fallbackUsed) {
+          setForYouFallbackMessage('Personalized picks are limited right now, so we blended in top headlines.');
+          trackEventAsync('for_you_fallback', {
+            country: activePreferences.country,
+            interestCount: activePreferences.interests.length,
+          });
+        } else {
+          setForYouFallbackMessage('');
+        }
+
+        setForYouItems(forYou.items);
+        setNews(items);
+        setLastUpdated(new Date().toLocaleString());
+        lastRefreshDateRef.current = getLocalDateKey();
+
+        trackEventAsync('feed_loaded', {
+          count: items.length,
+          forYouCount: forYou.items.length,
+          platform: Platform.OS,
+          country: activePreferences.country,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to load news right now.';
+        trackEventAsync('feed_load_failed', {
+          platform: Platform.OS,
+          message,
+        });
+        setErrorMessage(message);
+        setNews([]);
+        setForYouItems([]);
+        setForYouFallbackMessage('');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [buildForYouItems]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const loadPreferences = async () => {
+        try {
+          const stored = await readUserPreferences();
+          if (cancelled) return;
+          setPreferences(stored);
+          preferencesRef.current = stored;
+        } catch {
+          if (cancelled) return;
+          const fallback = getDefaultUserPreferences();
+          setPreferences(fallback);
+          preferencesRef.current = fallback;
+        } finally {
+          if (!cancelled) {
+            setPreferencesLoaded(true);
+          }
+        }
+      };
+
+      loadPreferences();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
   useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
+
+  const preferenceSignature = preferences
+    ? `${preferences.country}|${preferences.interests.slice().sort().join(',')}`
+    : '';
+
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+
+    if (!preferences?.onboardingCompleted) {
+      setLoading(false);
+      setRefreshing(false);
+      router.replace('/onboarding');
+      return;
+    }
+
     refresh();
 
     let midnightTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,7 +257,7 @@ export default function NewsScreen() {
       const msUntilMidnight = nextMidnight.getTime() - now.getTime() + 1000;
 
       midnightTimer = setTimeout(async () => {
-        await refresh();
+        await refresh({ silent: true });
         scheduleNextMidnightRefresh();
       }, msUntilMidnight);
     };
@@ -114,7 +269,7 @@ export default function NewsScreen() {
 
       const todayKey = getLocalDateKey();
       if (todayKey !== lastRefreshDateRef.current) {
-        refresh();
+        refresh({ silent: true });
       }
     });
 
@@ -122,20 +277,20 @@ export default function NewsScreen() {
       if (midnightTimer) clearTimeout(midnightTimer);
       subscription.remove();
     };
-  }, [refresh]);
+  }, [preferencesLoaded, preferences?.onboardingCompleted, preferenceSignature, refresh, router]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    refresh();
+    refresh({ silent: true });
   };
 
   const openReader = useCallback(
-    (item: NewsItem) => {
+    (item: NewsItem, entryPoint: 'feed' | 'for_you' = 'feed') => {
       if (!item.url) return;
       trackEventAsync('headline_tap', {
         articleId: item.id,
         sourceName: item.sourceName,
-        entryPoint: 'feed',
+        entryPoint,
       });
       router.push({
         pathname: '/reader',
@@ -224,11 +379,11 @@ export default function NewsScreen() {
     Animated.stagger(70, animations).start();
   }, [news]);
 
-  if (loading || !fontsLoaded) {
+  if (loading || !fontsLoaded || !preferencesLoaded) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#D1495B" />
-        <Text style={styles.loadingText}>Loading today&apos;s top headlines...</Text>
+        <Text style={styles.loadingText}>Loading your briefing...</Text>
       </View>
     );
   }
@@ -245,7 +400,7 @@ export default function NewsScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.kicker}>EllieBellie Bulletin</Text>
-            <Text style={styles.headerTitle}>Top 10 Headlines</Text>
+            <Text style={styles.headerTitle}>Top Headlines</Text>
             <Text style={styles.headerSubtitle}>Fresh stories curated for today. Tap any card to open the full report.</Text>
             <View style={styles.metaPillRow}>
               <View style={styles.metaPill}>
@@ -255,9 +410,39 @@ export default function NewsScreen() {
                 <Text style={styles.savedPillText}>Saved: {Object.keys(savedNewsById).length}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.savedScreenButton} onPress={() => router.push('/saved')} activeOpacity={0.85}>
-              <Text style={styles.savedScreenButtonText}>Open Saved</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActionRow}>
+              <TouchableOpacity style={styles.savedScreenButton} onPress={() => router.push('/saved')} activeOpacity={0.85}>
+                <Text style={styles.savedScreenButtonText}>Open Saved</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.preferencesButton}
+                onPress={() => router.push('/preferences')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.preferencesButtonText}>Preferences</Text>
+              </TouchableOpacity>
+            </View>
+            {forYouItems.length ? (
+              <View style={styles.forYouSection}>
+                <Text style={styles.forYouTitle}>For You</Text>
+                {forYouFallbackMessage ? <Text style={styles.forYouFallbackText}>{forYouFallbackMessage}</Text> : null}
+                {forYouItems.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.forYouCard}
+                    onPress={() => openReader(item, 'for_you')}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.forYouCardTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.forYouCardMeta}>
+                      {item.sourceName} • {formatDate(item.publishedAt)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
         }
@@ -394,8 +579,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  savedScreenButton: {
+  headerActionRow: {
     marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  savedScreenButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
@@ -405,6 +594,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8F8',
   },
   savedScreenButtonText: { fontSize: 11, color: '#D1495B', fontFamily: 'SpaceMono' },
+  preferencesButton: {
+    marginLeft: 8,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#087E8B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#EAF6F8',
+  },
+  preferencesButtonText: { fontSize: 11, color: '#087E8B', fontFamily: 'SpaceMono' },
+  forYouSection: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#E6DAC8',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255, 251, 245, 0.95)',
+  },
+  forYouTitle: { fontSize: 18, color: '#1A1B25', fontWeight: '700' },
+  forYouFallbackText: { marginTop: 6, color: '#5B5560', fontSize: 11, fontFamily: 'SpaceMono' },
+  forYouCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ECD8BF',
+    backgroundColor: '#FFFFFF',
+  },
+  forYouCardTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: '#20222D' },
+  forYouCardMeta: { marginTop: 6, fontSize: 11, color: '#6B6672', fontFamily: 'SpaceMono' },
   savedPillText: { fontSize: 11, color: '#087E8B', fontFamily: 'SpaceMono' },
   updateText: { fontSize: 11, color: '#5B5560', fontFamily: 'SpaceMono' },
   errorText: { marginTop: 10, color: '#B00020', fontSize: 12, fontFamily: 'SpaceMono' },

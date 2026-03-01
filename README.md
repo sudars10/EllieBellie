@@ -4,6 +4,9 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
 
 ## Features
 - Displays top news articles from NewsAPI
+- First-run onboarding for location + interest selection
+- Personalized `For You` section based on selected interests
+- Editable preferences screen from the feed header
 - In-app reader screen for opening articles
 - External browser fallback from the reader screen
 - Pull-to-refresh functionality
@@ -45,7 +48,10 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
    - Press `w` for web browser
 
 ## User Flow
+- Onboarding: select location and interests on first launch.
 - Feed: browse latest headlines and tap a card to open the in-app reader.
+- For You: open personalized picks surfaced at the top of the feed.
+- Preferences: open `Preferences` from the feed header to update location/interests.
 - Save for later: tap `Save for later` on a headline card.
 - Saved screen: open `Open Saved` from the feed header to manage saved stories.
 - Reader: read inside the app, then use `Open External` if needed.
@@ -53,10 +59,13 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
 ## Project Structure
 - `app/` — Main application code and screens
   - `index.tsx` — Main news feed screen
+  - `onboarding.tsx` — First-run personalization setup
+  - `preferences.tsx` — Preference editing screen
   - `saved.tsx` — Saved stories screen
   - `reader.tsx` — In-app reader screen
 - `lib/`
   - `savedNews.ts` — Saved story persistence helpers
+  - `userPreferences.ts` — Local personalization preferences
   - `analytics.ts` — Local analytics scaffold (`console` + AsyncStorage event buffer)
 - `app.config.js` — Expo configuration (reads from environment variables)
 - `ios/` — Optional native iOS project files generated via Expo prebuild when needed

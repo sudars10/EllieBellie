@@ -6,7 +6,10 @@ export type AnalyticsEventName =
   | 'bookmark_added'
   | 'bookmark_removed'
   | 'saved_opened'
-  | 'feed_load_failed';
+  | 'feed_load_failed'
+  | 'onboarding_completed'
+  | 'preferences_updated'
+  | 'for_you_fallback';
 
 export interface AnalyticsEvent {
   name: AnalyticsEventName;
