@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -18,17 +18,34 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { trackEventAsync } from '../lib/analytics';
+import { buildAiSummaryBlocks } from '../lib/aiSummary';
 import { TopHeadlinesNewsProvider } from '../lib/newsProvider';
 import { getNewsItemId, readSavedNews, SavedNewsItem, SavedNewsMap, writeSavedNews } from '../lib/savedNews';
+import { clusterStories, createStorySnapshot, getStoryChangeLabel, StoryClusterSnapshot } from '../lib/storyClustering';
 import { getDefaultUserPreferences, readUserPreferences, UserPreferences } from '../lib/userPreferences';
 
 type NewsItem = SavedNewsItem;
 
-const TOP_NEWS_COUNT = 10;
+interface StoryRow {
+  id: string;
+  headline: string;
+  primaryArticle: NewsItem;
+  articles: NewsItem[];
+  coverageCount: number;
+  sourceNames: string[];
+  latestPublishedAt: string;
+  changeLabel: string;
+}
+
+const FEED_FETCH_ARTICLE_COUNT = 24;
+const TOP_STORY_CLUSTER_COUNT = 10;
+const MAJOR_STORY_MIN_COVERAGE = 2;
 const FOR_YOU_COUNT = 3;
 const FOR_YOU_CATEGORY_LIMIT = 3;
 const FOR_YOU_FETCH_PAGE_SIZE = 6;
+
 const newsProvider = new TopHeadlinesNewsProvider();
+const AI_SUMMARY_ENABLED = process.env.EXPO_PUBLIC_ENABLE_AI_SUMMARY === 'true';
 
 const getLocalDateKey = () => {
   const now = new Date();
@@ -53,13 +70,25 @@ interface ForYouResult {
   fallbackUsed: boolean;
 }
 
+const formatDate = (iso: string) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
 export default function NewsScreen() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [storyRows, setStoryRows] = useState<StoryRow[]>([]);
   const [forYouItems, setForYouItems] = useState<NewsItem[]>([]);
   const [forYouFallbackMessage, setForYouFallbackMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -74,6 +103,7 @@ export default function NewsScreen() {
   const hasLoadedSavedNewsRef = useRef(false);
   const revealValuesRef = useRef<Animated.Value[]>([]);
   const preferencesRef = useRef<UserPreferences | null>(null);
+  const storySnapshotsRef = useRef<Record<string, StoryClusterSnapshot>>({});
 
   const buildForYouItems = useCallback(async (topHeadlines: NewsItem[], activePreferences: UserPreferences): Promise<ForYouResult> => {
     const preferredCategories = activePreferences.interests.slice(0, FOR_YOU_CATEGORY_LIMIT);
@@ -149,15 +179,35 @@ export default function NewsScreen() {
         }
         setErrorMessage('');
 
-        const items = await newsProvider.fetchTopHeadlines({
+        const articles = await newsProvider.fetchTopHeadlines({
           country: activePreferences.country,
           category: 'all',
-          pageSize: TOP_NEWS_COUNT,
+          pageSize: FEED_FETCH_ARTICLE_COUNT,
           isWeb: Platform.OS === 'web',
           newsApiKey: getNewsApiKey(),
         });
 
-        const forYou = await buildForYouItems(items, activePreferences);
+        const clustered = clusterStories(articles, TOP_STORY_CLUSTER_COUNT);
+        const previousSnapshots = storySnapshotsRef.current;
+
+        const storyRowsWithTimeline: StoryRow[] = clustered.map((cluster) => ({
+          id: cluster.id,
+          headline: cluster.headline,
+          primaryArticle: cluster.primaryArticle,
+          articles: cluster.articles,
+          coverageCount: cluster.coverageCount,
+          sourceNames: cluster.sourceNames,
+          latestPublishedAt: cluster.latestPublishedAt,
+          changeLabel: getStoryChangeLabel(cluster, previousSnapshots[cluster.id]),
+        }));
+
+        const nextSnapshotMap: Record<string, StoryClusterSnapshot> = {};
+        storyRowsWithTimeline.forEach((row) => {
+          nextSnapshotMap[row.id] = createStorySnapshot(row);
+        });
+        storySnapshotsRef.current = nextSnapshotMap;
+
+        const forYou = await buildForYouItems(articles, activePreferences);
 
         if (forYou.fallbackUsed) {
           setForYouFallbackMessage('Personalized picks are limited right now, so we blended in top headlines.');
@@ -169,13 +219,14 @@ export default function NewsScreen() {
           setForYouFallbackMessage('');
         }
 
+        setStoryRows(storyRowsWithTimeline);
         setForYouItems(forYou.items);
-        setNews(items);
         setLastUpdated(new Date().toLocaleString());
         lastRefreshDateRef.current = getLocalDateKey();
 
         trackEventAsync('feed_loaded', {
-          count: items.length,
+          storyCount: storyRowsWithTimeline.length,
+          articleCount: articles.length,
           forYouCount: forYou.items.length,
           platform: Platform.OS,
           country: activePreferences.country,
@@ -187,7 +238,7 @@ export default function NewsScreen() {
           message,
         });
         setErrorMessage(message);
-        setNews([]);
+        setStoryRows([]);
         setForYouItems([]);
         setForYouFallbackMessage('');
       } finally {
@@ -285,7 +336,7 @@ export default function NewsScreen() {
   };
 
   const openReader = useCallback(
-    (item: NewsItem, entryPoint: 'feed' | 'for_you' = 'feed') => {
+    (item: NewsItem, entryPoint: 'feed' | 'for_you' | 'compare' = 'feed') => {
       if (!item.url) return;
       trackEventAsync('headline_tap', {
         articleId: item.id,
@@ -305,17 +356,33 @@ export default function NewsScreen() {
     [router]
   );
 
-  const formatDate = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  const openCompare = useCallback(
+    (row: StoryRow) => {
+      const perspectives = row.articles.slice(0, 3).map((article) => ({
+        id: article.id,
+        title: article.title,
+        url: article.url,
+        sourceName: article.sourceName,
+        publishedAt: article.publishedAt,
+      }));
+
+      trackEventAsync('compare_opened', {
+        storyId: row.id,
+        coverageCount: row.coverageCount,
+      });
+
+      router.push({
+        pathname: '/compare',
+        params: {
+          headline: row.headline,
+          coverageCount: String(row.coverageCount),
+          changeLabel: row.changeLabel,
+          perspectives: encodeURIComponent(JSON.stringify(perspectives)),
+        },
+      });
+    },
+    [router]
+  );
 
   const toggleSaved = useCallback((item: NewsItem) => {
     const id = item.id || getNewsItemId(item);
@@ -365,9 +432,9 @@ export default function NewsScreen() {
   }, [savedNewsById]);
 
   useEffect(() => {
-    if (!news.length) return;
+    if (!storyRows.length) return;
 
-    revealValuesRef.current = news.map(() => new Animated.Value(0));
+    revealValuesRef.current = storyRows.map(() => new Animated.Value(0));
     const animations = revealValuesRef.current.map((value, index) =>
       Animated.timing(value, {
         toValue: 1,
@@ -377,7 +444,9 @@ export default function NewsScreen() {
       })
     );
     Animated.stagger(70, animations).start();
-  }, [news]);
+  }, [storyRows]);
+
+  const savedCount = useMemo(() => Object.keys(savedNewsById).length, [savedNewsById]);
 
   if (loading || !fontsLoaded || !preferencesLoaded) {
     return (
@@ -395,19 +464,19 @@ export default function NewsScreen() {
       <View style={styles.bgOrbSecondary} />
       <View style={styles.bgOrbTertiary} />
       <FlatList
-        data={news}
+        data={storyRows}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.kicker}>EllieBellie Bulletin</Text>
-            <Text style={styles.headerTitle}>Top Headlines</Text>
-            <Text style={styles.headerSubtitle}>Fresh stories curated for today. Tap any card to open the full report.</Text>
+            <Text style={styles.headerTitle}>Top Stories</Text>
+            <Text style={styles.headerSubtitle}>Clustered coverage with source compare and timeline updates.</Text>
             <View style={styles.metaPillRow}>
               <View style={styles.metaPill}>
                 <Text style={styles.updateText}>Updated: {lastUpdated || 'N/A'}</Text>
               </View>
               <View style={styles.savedPill}>
-                <Text style={styles.savedPillText}>Saved: {Object.keys(savedNewsById).length}</Text>
+                <Text style={styles.savedPillText}>Saved: {savedCount}</Text>
               </View>
             </View>
             <View style={styles.headerActionRow}>
@@ -448,12 +517,22 @@ export default function NewsScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No headlines available right now.</Text>
+            <Text style={styles.emptyText}>No stories available right now.</Text>
           </View>
         }
         renderItem={({ item, index }) => {
           const reveal = revealValuesRef.current[index] || new Animated.Value(1);
-          const itemSaved = Boolean(savedNewsById[item.id]);
+          const itemSaved = Boolean(savedNewsById[item.primaryArticle.id]);
+          const majorStory = item.coverageCount >= MAJOR_STORY_MIN_COVERAGE;
+          const summaryBlocks = AI_SUMMARY_ENABLED
+            ? buildAiSummaryBlocks({
+                headline: item.headline,
+                coverageCount: item.coverageCount,
+                sourceNames: item.sourceNames,
+                latestPublishedAt: item.latestPublishedAt,
+              })
+            : [];
+
           return (
             <Animated.View
               style={[
@@ -482,16 +561,57 @@ export default function NewsScreen() {
                   <Text style={styles.newsNumberText}>{String(index + 1).padStart(2, '0')}</Text>
                 </View>
                 <View style={styles.newsContent}>
-                  <TouchableOpacity style={styles.newsOpenArea} onPress={() => openReader(item)} activeOpacity={0.86}>
-                    <Text style={styles.newsTitle}>{item.title}</Text>
+                  <TouchableOpacity
+                    style={styles.newsOpenArea}
+                    onPress={() => openReader(item.primaryArticle)}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.newsTitle}>{item.headline}</Text>
                     <View style={styles.metaRow}>
-                      <Text style={styles.newsSource}>{item.sourceName}</Text>
-                      <Text style={styles.newsDate}>{formatDate(item.publishedAt)}</Text>
+                      <Text style={styles.newsSource}>{item.primaryArticle.sourceName}</Text>
+                      <Text style={styles.newsDate}>{formatDate(item.primaryArticle.publishedAt)}</Text>
                     </View>
                   </TouchableOpacity>
+
+                  <View style={styles.coverageRow}>
+                    <View style={styles.coverageBadge}>
+                      <Text style={styles.coverageBadgeText}>{item.coverageCount} sources</Text>
+                    </View>
+                    {item.coverageCount > 1 ? (
+                      <TouchableOpacity
+                        style={styles.compareButton}
+                        onPress={() => openCompare(item)}
+                        activeOpacity={0.86}
+                      >
+                        <Text style={styles.compareButtonText}>Compare {Math.min(item.coverageCount, 3)} views</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  {majorStory ? (
+                    <View style={styles.timelineRow}>
+                      <Text style={styles.timelineLabel}>What changed</Text>
+                      <Text style={styles.timelineValue}>{item.changeLabel}</Text>
+                    </View>
+                  ) : null}
+
+                  {AI_SUMMARY_ENABLED && majorStory ? (
+                    <View style={styles.aiSummarySection}>
+                      <Text style={styles.aiSummaryTitle}>AI summary preview</Text>
+                      {summaryBlocks.map((block) => (
+                        <View key={`${item.id}-${block.id}`} style={styles.aiSummaryRow}>
+                          <Text style={styles.aiSummaryTag}>{block.label}</Text>
+                          <Text style={styles.aiSummaryText} numberOfLines={3}>
+                            {block.text}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
                   <TouchableOpacity
                     style={[styles.saveButton, itemSaved && styles.saveButtonActive]}
-                    onPress={() => toggleSaved(item)}
+                    onPress={() => toggleSaved(item.primaryArticle)}
                     activeOpacity={0.88}
                   >
                     <Text style={[styles.saveButtonText, itemSaved && styles.saveButtonTextActive]}>
@@ -667,6 +787,52 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   newsSource: { fontSize: 12, color: '#087E8B', fontFamily: 'SpaceMono', flex: 1, marginRight: 8 },
   newsDate: { fontSize: 11, color: '#6B6672', fontFamily: 'SpaceMono' },
+  coverageRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center' },
+  coverageBadge: {
+    borderRadius: 999,
+    backgroundColor: '#EAF6F8',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  coverageBadgeText: { color: '#087E8B', fontFamily: 'SpaceMono', fontSize: 11 },
+  compareButton: {
+    marginLeft: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#087E8B',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#F4FBFC',
+  },
+  compareButtonText: { color: '#087E8B', fontFamily: 'SpaceMono', fontSize: 11 },
+  timelineRow: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECD8BF',
+    backgroundColor: '#FFFBF5',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  timelineLabel: { color: '#D1495B', fontSize: 10, fontFamily: 'SpaceMono', textTransform: 'uppercase' },
+  timelineValue: { marginTop: 4, color: '#4C4F5D', fontSize: 12, fontFamily: 'SpaceMono' },
+  aiSummarySection: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ECD8BF',
+    backgroundColor: '#FFFBF6',
+    padding: 10,
+  },
+  aiSummaryTitle: { color: '#20222D', fontSize: 14, fontWeight: '700' },
+  aiSummaryRow: { marginTop: 8 },
+  aiSummaryTag: {
+    color: '#D1495B',
+    fontFamily: 'SpaceMono',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  aiSummaryText: { marginTop: 4, color: '#4C4F5D', fontSize: 12, lineHeight: 17 },
   saveButton: {
     marginTop: 12,
     alignSelf: 'flex-start',

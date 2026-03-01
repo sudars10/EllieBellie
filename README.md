@@ -7,6 +7,10 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
 - First-run onboarding for location + interest selection
 - Personalized `For You` section based on selected interests
 - Editable preferences screen from the feed header
+- Story clustering across similar headlines
+- Coverage-count indicators and compare view with 2-3 source perspectives
+- “What changed since last update” timeline row on major stories
+- AI summary preview blocks (`10-sec`, `1-min`, `deep dive`) behind `EXPO_PUBLIC_ENABLE_AI_SUMMARY`
 - In-app reader screen for opening articles
 - External browser fallback from the reader screen
 - Pull-to-refresh functionality
@@ -49,9 +53,10 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
 
 ## User Flow
 - Onboarding: select location and interests on first launch.
-- Feed: browse latest headlines and tap a card to open the in-app reader.
+- Feed: browse clustered top stories, check coverage count, and tap a story to read.
 - For You: open personalized picks surfaced at the top of the feed.
 - Preferences: open `Preferences` from the feed header to update location/interests.
+- Compare: tap `Compare ... views` on multi-source stories to scan perspectives.
 - Save for later: tap `Save for later` on a headline card.
 - Saved screen: open `Open Saved` from the feed header to manage saved stories.
 - Reader: read inside the app, then use `Open External` if needed.
@@ -61,11 +66,14 @@ EllieBellie is an Expo mobile application built with [Expo](https://expo.dev/) a
   - `index.tsx` — Main news feed screen
   - `onboarding.tsx` — First-run personalization setup
   - `preferences.tsx` — Preference editing screen
+  - `compare.tsx` — Source perspective comparison screen
   - `saved.tsx` — Saved stories screen
   - `reader.tsx` — In-app reader screen
 - `lib/`
   - `savedNews.ts` — Saved story persistence helpers
   - `userPreferences.ts` — Local personalization preferences
+  - `storyClustering.ts` — Story clustering + timeline label helpers
+  - `aiSummary.ts` — AI summary preview text builder
   - `analytics.ts` — Local analytics scaffold (`console` + AsyncStorage event buffer)
 - `app.config.js` — Expo configuration (reads from environment variables)
 - `ios/` — Optional native iOS project files generated via Expo prebuild when needed

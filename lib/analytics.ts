@@ -9,7 +9,8 @@ export type AnalyticsEventName =
   | 'feed_load_failed'
   | 'onboarding_completed'
   | 'preferences_updated'
-  | 'for_you_fallback';
+  | 'for_you_fallback'
+  | 'compare_opened';
 
 export interface AnalyticsEvent {
   name: AnalyticsEventName;
